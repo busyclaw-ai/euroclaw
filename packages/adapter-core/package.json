@@ -1,0 +1,30 @@
+{
+	"name": "@euroclaw/adapter-core",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Protocol-neutral request handler and route plugin foundation for euroclaw adapters.",
+	"license": "MIT",
+	"author": "Konstantin Ponomarev",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run src",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@euroclaw/core": "workspace:*",
+		"@euroclaw/errors": "workspace:*",
+		"euroclaw": "workspace:*"
+	}
+}

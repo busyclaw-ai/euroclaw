@@ -1,0 +1,386 @@
+import type {
+	EuroclawCronResult,
+	EuroclawCronTask,
+	EuroclawPlugin,
+	EuroclawRoute,
+	EuroclawRouteRequest,
+} from "@euroclaw/core";
+import {
+	configurationError,
+	EuroclawError,
+	errorMessage,
+} from "@euroclaw/errors";
+import type { Claw, ClawApi, ClawApiHttpMethod, ClawApiMethod } from "euroclaw";
+import { clawApiRouteList, parseClawApiInput } from "euroclaw";
+
+export type ClawHttpMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
+
+export type ClawRequestHandlerOptions = {
+	basePath?: string;
+	plugins?: readonly EuroclawPlugin[];
+};
+
+type CronTaskResult = EuroclawCronResult & { id: string };
+
+function json(data: unknown, init?: ResponseInit): Response {
+	return new Response(JSON.stringify(data), {
+		...init,
+		headers: {
+			"content-type": "application/json; charset=utf-8",
+			...(init?.headers ?? {}),
+		},
+	});
+}
+
+function statusForError(error: unknown): number {
+	if (error instanceof EuroclawError) {
+		if (error.code === "EUROCLAW_VALIDATION_FAILED") return 400;
+		if (error.code === "EUROCLAW_UNSUPPORTED_OPERATION") return 400;
+	}
+	if (error instanceof SyntaxError) return 400;
+	return 500;
+}
+
+function errorResponse(
+	error: unknown,
+	status = statusForError(error),
+): Response {
+	return json(
+		{
+			error: { message: errorMessage(error) },
+			ok: false,
+		},
+		{ status },
+	);
+}
+
+function normalizePath(path: string): string {
+	if (!path.startsWith("/")) return `/${path}`;
+	return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function stripBasePath(pathname: string, basePath: string): string | null {
+	const base = normalizePath(basePath);
+	const path = normalizePath(pathname);
+	if (base === "/") return path;
+	if (path === base) return "/";
+	if (path.startsWith(`${base}/`)) return path.slice(base.length);
+	return null;
+}
+
+type ResolvedRoute = EuroclawRoute<Claw> & { id: string };
+
+function routeKey(route: Pick<ResolvedRoute, "method" | "path">): string {
+	return `${route.method} ${normalizePath(route.path)}`;
+}
+
+function checkRouteConflicts(routes: readonly ResolvedRoute[]): void {
+	const seen = new Map<string, string>();
+	for (const route of routes) {
+		const key = routeKey(route);
+		const previous = seen.get(key);
+		if (previous) {
+			throw configurationError("euroclaw route conflict", {
+				route: route.id ?? key,
+				previous,
+				key,
+			});
+		}
+		seen.set(key, route.id);
+	}
+}
+
+function methodFrom(request: Request): ClawHttpMethod | null {
+	const method = request.method.toUpperCase();
+	if (
+		method === "DELETE" ||
+		method === "GET" ||
+		method === "PATCH" ||
+		method === "POST" ||
+		method === "PUT"
+	) {
+		return method;
+	}
+	return null;
+}
+
+async function readInput(
+	request: EuroclawRouteRequest,
+	method: ClawHttpMethod,
+): Promise<unknown> {
+	if (method === "GET") {
+		const search = new URL(request.url).searchParams;
+		const encoded = search.get("input");
+		if (encoded) return JSON.parse(encoded) as unknown;
+		return Object.fromEntries(search.entries());
+	}
+	const text = await request.text();
+	return text ? (JSON.parse(text) as unknown) : {};
+}
+
+function resultToResponse(result: unknown): Response {
+	if (result instanceof Response) return result;
+	if (
+		result &&
+		typeof result === "object" &&
+		("body" in result || "status" in result || "headers" in result)
+	) {
+		const routeResult = result as {
+			body?: unknown;
+			headers?: Record<string, string>;
+			status?: number;
+		};
+		return json(routeResult.body ?? { ok: true }, {
+			headers: routeResult.headers,
+			status: routeResult.status,
+		});
+	}
+	return json({ data: result, ok: true });
+}
+
+function apiRoutes(): ResolvedRoute[] {
+	return clawApiRouteList.map((apiRoute) => {
+		const name = apiRoute.apiMethod;
+		const method = apiRoute.httpMethod;
+		return {
+			id: `api:${name}`,
+			method,
+			path: apiRoute.path,
+			handler: async ({ request, claw: routeClaw }) => {
+				const fn = (routeClaw.api as Record<string, unknown>)[name];
+				if (typeof fn !== "function") {
+					return {
+						status: 404,
+						body: { ok: false, error: `unknown api method: ${name}` },
+					};
+				}
+				const input = parseClawApiInput(name, await readInput(request, method));
+				const data = await (fn as (input: unknown) => Promise<unknown>)(input);
+				return { body: { data, ok: true } };
+			},
+		} satisfies ResolvedRoute;
+	});
+}
+
+function pluginsFrom(
+	claw: Claw,
+	options: ClawRequestHandlerOptions,
+): EuroclawPlugin[] {
+	return [...(claw.$context?.plugins ?? []), ...(options.plugins ?? [])];
+}
+
+function cronTasksFrom(plugins: readonly EuroclawPlugin[]): EuroclawCronTask[] {
+	return plugins.flatMap((plugin) => [...(plugin.cron ?? [])]);
+}
+
+async function runCronTasks(input: {
+	claw: Claw;
+	limit?: number;
+	request: EuroclawRouteRequest;
+	tasks: readonly EuroclawCronTask[];
+}): Promise<CronTaskResult[]> {
+	const results: CronTaskResult[] = [];
+	for (const task of input.tasks) {
+		const result = await task.handler({
+			claw: input.claw,
+			limit: input.limit,
+			request: input.request,
+		});
+		results.push({ id: task.id, ...result });
+	}
+	return results;
+}
+
+function baseRoutes(
+	claw: Claw,
+	options: ClawRequestHandlerOptions,
+): ResolvedRoute[] {
+	const cronHandler = claw.$context?.cronHandler;
+	return [
+		{
+			id: "health",
+			method: "GET",
+			path: "/health",
+			handler: () => ({ body: { ok: true } }),
+		},
+		...(cronHandler
+			? [
+					{
+						id: "cron",
+						method: "POST" as const,
+						path: "/cron",
+						handler: async ({ claw, request }) => {
+							const headerName =
+								cronHandler.headerName ?? "x-euroclaw-cron-secret";
+							if (
+								"secret" in cronHandler &&
+								request.headers.get(headerName) !== cronHandler.secret
+							) {
+								return {
+									status: 401,
+									body: { error: "unauthorized", ok: false },
+								};
+							}
+							const tasks = cronTasksFrom(pluginsFrom(claw, options));
+							const results = await runCronTasks({
+								claw,
+								limit: cronHandler.limit,
+								request,
+								tasks,
+							});
+							return { body: { data: { tasks: results }, ok: true } };
+						},
+					} satisfies ResolvedRoute,
+				]
+			: []),
+		...apiRoutes(),
+	];
+}
+
+export type ClawClientFetch = (
+	input: RequestInfo | URL,
+	init?: RequestInit,
+) => Promise<Response>;
+
+export type ClawClientOptions = {
+	baseUrl?: string | URL;
+	fetch?: ClawClientFetch;
+	headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
+};
+
+function normalizeBaseUrl(baseUrl: string | URL | undefined): string {
+	return String(baseUrl ?? "/api/euroclaw").replace(/\/+$/, "");
+}
+
+function routeUrl(baseUrl: string, path: string): string {
+	return `${baseUrl}${normalizePath(path)}`;
+}
+
+function withEncodedInput(url: string, input: unknown): string {
+	const parsed = new URL(url, "http://euroclaw.local");
+	parsed.searchParams.set("input", JSON.stringify(input ?? {}));
+	if (/^https?:\/\//.test(url)) return parsed.toString();
+	return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+async function resolveHeaders(
+	headers: ClawClientOptions["headers"],
+): Promise<HeadersInit | undefined> {
+	return typeof headers === "function" ? headers() : headers;
+}
+
+async function jsonHeaders(
+	headers: ClawClientOptions["headers"],
+): Promise<Headers> {
+	const next = new Headers(await resolveHeaders(headers));
+	next.set("content-type", "application/json");
+	return next;
+}
+
+async function readClientResponse(response: Response): Promise<unknown> {
+	const text = await response.text();
+	const body = text ? (JSON.parse(text) as unknown) : undefined;
+	const envelope = body as
+		| { data?: unknown; error?: { message?: string }; ok?: boolean }
+		| undefined;
+	if (!response.ok || envelope?.ok === false) {
+		throw new Error(
+			envelope?.error?.message ??
+				`euroclaw request failed with status ${response.status}`,
+		);
+	}
+	return envelope?.data;
+}
+
+async function callApiRoute(input: {
+	baseUrl: string;
+	fetch: ClawClientFetch;
+	headers?: ClawClientOptions["headers"];
+	method: ClawApiMethod;
+	payload: unknown;
+	routeMethod: ClawApiHttpMethod;
+	path: string;
+}): Promise<unknown> {
+	const payload = parseClawApiInput(input.method, input.payload ?? {});
+	const headers = await resolveHeaders(input.headers);
+	const url = routeUrl(input.baseUrl, input.path);
+	if (input.routeMethod === "GET") {
+		return readClientResponse(
+			await input.fetch(withEncodedInput(url, payload), {
+				headers,
+				method: "GET",
+			}),
+		);
+	}
+	return readClientResponse(
+		await input.fetch(url, {
+			body: JSON.stringify(payload),
+			headers: await jsonHeaders(input.headers),
+			method: input.routeMethod,
+		}),
+	);
+}
+
+export function createClawClient(options: ClawClientOptions = {}): ClawApi {
+	const baseUrl = normalizeBaseUrl(options.baseUrl);
+	const clientFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+	return Object.fromEntries(
+		clawApiRouteList.map((route) => [
+			route.apiMethod,
+			(input: unknown) =>
+				callApiRoute({
+					baseUrl,
+					fetch: clientFetch,
+					headers: options.headers,
+					method: route.apiMethod,
+					path: route.path,
+					payload: input,
+					routeMethod: route.httpMethod,
+				}),
+		]),
+	) as ClawApi;
+}
+
+function pluginRoutes(
+	claw: Claw,
+	options: ClawRequestHandlerOptions,
+): ResolvedRoute[] {
+	const plugins = pluginsFrom(claw, options);
+	return plugins.flatMap((plugin) =>
+		(plugin.routes ?? []).map(
+			(route) =>
+				({
+					...route,
+					id: route.id ?? `${plugin.id}:${route.method}:${route.path}`,
+				}) as ResolvedRoute,
+		),
+	);
+}
+
+export function toRequestHandler(
+	claw: Claw,
+	options: ClawRequestHandlerOptions = {},
+): (request: Request) => Promise<Response> {
+	const routes = [...baseRoutes(claw, options), ...pluginRoutes(claw, options)];
+	checkRouteConflicts(routes);
+	const routeMap = new Map(routes.map((route) => [routeKey(route), route]));
+	const basePath = options.basePath ?? "/api/euroclaw";
+
+	return async (request) => {
+		const method = methodFrom(request);
+		if (!method) return errorResponse("method not allowed", 405);
+		const path = stripBasePath(new URL(request.url).pathname, basePath);
+		if (!path) return errorResponse("not found", 404);
+		const route = routeMap.get(`${method} ${normalizePath(path)}`);
+		if (!route) return errorResponse("not found", 404);
+		try {
+			return resultToResponse(
+				await route.handler({ claw, params: {}, request }),
+			);
+		} catch (error) {
+			return errorResponse(error);
+		}
+	};
+}
+
+export type { Claw, ClawApi };

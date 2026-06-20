@@ -1,0 +1,29 @@
+{
+	"name": "@euroclaw/adapter-next",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Next.js route-handler adapter for euroclaw.",
+	"license": "MIT",
+	"author": "Konstantin Ponomarev",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run src",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@euroclaw/adapter-core": "workspace:*",
+		"euroclaw": "workspace:*"
+	}
+}
