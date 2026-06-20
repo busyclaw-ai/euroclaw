@@ -1,0 +1,42 @@
+{
+	"name": "@euroclaw/core",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Core product contracts and governance primitives for euroclaw.",
+	"license": "MIT",
+	"author": "Konstantin Ponomarev",
+	"homepage": "https://github.com/euroclaw-sh/euroclaw#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/euroclaw-sh/euroclaw.git",
+		"directory": "packages/core"
+	},
+	"bugs": {
+		"url": "https://github.com/euroclaw-sh/euroclaw/issues"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run src",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@euroclaw/errors": "workspace:*",
+		"@noble/hashes": "2.2.0",
+		"arktype": "2.2.0"
+	}
+}
