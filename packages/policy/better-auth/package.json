@@ -1,0 +1,30 @@
+{
+	"name": "@euroclaw/policy-better-auth",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "better-auth access control for euroclaw: govern tool calls with the same roles/statements as your better-auth app. Implements the @euroclaw/policy-core PolicyEngine port.",
+	"license": "MIT",
+	"author": "Konstantin Ponomarev",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run src",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@euroclaw/core": "workspace:*",
+		"@euroclaw/policy-core": "workspace:*",
+		"better-auth": "1.6.19"
+	}
+}

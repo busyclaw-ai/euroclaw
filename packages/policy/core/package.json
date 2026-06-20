@@ -1,0 +1,30 @@
+{
+	"name": "@euroclaw/policy-core",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "The policy-engine port + the scaffolding that turns any engine (Cedar, OPA, SAP) into a euroclaw governance plugin.",
+	"license": "MIT",
+	"author": "Konstantin Ponomarev",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run src",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@euroclaw/core": "workspace:*",
+		"@euroclaw/errors": "workspace:*",
+		"arktype": "2.2.0"
+	}
+}

@@ -1,0 +1,31 @@
+{
+	"name": "@euroclaw/policy-cedar",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Cedar policy engine for euroclaw: evaluates tool calls against Cedar policies (deny-by-default) with conditional needs-approval. Implements the @euroclaw/policy-core PolicyEngine port.",
+	"license": "MIT",
+	"author": "Konstantin Ponomarev",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run src",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@cedar-policy/cedar-wasm": "4.11.1",
+		"@euroclaw/core": "workspace:*",
+		"@euroclaw/errors": "workspace:*",
+		"@euroclaw/policy-core": "workspace:*"
+	}
+}
