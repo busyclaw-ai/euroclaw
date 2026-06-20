@@ -1,0 +1,22 @@
+packages:
+  - "packages/*"
+  - "packages/policy/*"
+  - "packages/storage/*"
+  - "packages/plugins/*"
+  - "packages/engines/*"
+  - "apps/*"
+
+# better-sqlite3 needs its native build to run (only this one is allowlisted) — used by the
+# SQL storage adapters' tests via an in-memory database.
+allowBuilds:
+  better-sqlite3: true
+  mongodb-memory-server: true
+  prisma: true
+  "@prisma/client": true
+  "@prisma/engines": true
+onlyBuiltDependencies:
+  - better-sqlite3
+  - mongodb-memory-server
+  - prisma
+  - "@prisma/client"
+  - "@prisma/engines"

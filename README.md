@@ -1,49 +1,105 @@
 # euroclaw
 
-**A governed AI agent.**
+**An embeddable, governed AI agent runtime.**
 
-> 🚀 **Public next week.**
+> 🚧 **Pre-alpha — not usable yet.** Nothing here is published or stable, APIs change
+> without notice, and there's no security review or support. This README describes where
+> euroclaw is going and what's built so far — **not** something you can integrate today.
 
-euroclaw is an AI agent that's **governed by construction**: every action it takes — every
-tool call, every model call — is **redacted**, **policy-gated**, and written to a
-**tamper-evident audit trail**. It works on real people's data without ever holding the
-sensitive parts in the clear.
+euroclaw is the agent layer you'd otherwise be nervous to build yourself: an autonomous AI
+runtime that embeds inside your app and acts through *your* auth, *your* database, and *your*
+policy engine. The aim is that every model call and tool call passes through redaction, policy
+gates, optional human approval, and a tamper-evident audit trail — **by construction**, so the
+agent can't act around your rules.
 
-Its governance core is **plugin-extensible**: compliance (EU GDPR + AI Act, HIPAA, …) is the
-flagship *plugin*, **not** the product — you opt into the governance you need.
+Governance is the core; compliance regimes (EU GDPR + AI Act, HIPAA, …) are meant to be opt-in
+**plugins**, not the product.
 
-## What it does
+## The idea
 
-- **Redact at the edge.** PII becomes placeholders the moment it arrives; the real values live
-  in a vault and reattach only inside the tool that needs them. Erasing a person is one key
-  delete — GDPR Article 17 as a primitive.
-- **Gate every action.** A pipeline of checks runs before each tool or model call: permit,
-  deny, or pause for a human. Your rules, your policy engine — the agent can't act around them.
-- **Audit, tamper-evident.** Every decision lands in a hash-chained log (SHA-256 by default).
-  Not "we have logs" — a record you can hand an auditor.
+Shipping an agent that touches real user data is a minefield — PII leaking to the model, tools
+doing things nobody approved, no record when something goes wrong, and "delete my data" being a
+nightmare. euroclaw's bet is that those controls belong in the runtime's hot path, not in prompt
+instructions or config you can forget to set:
 
-**Both boundaries** it acts through are governed: the tools it calls *and* the model it talks
-to — the prompt is redacted before it ever leaves for the provider.
+- **Redact at the edge.** PII is replaced with placeholders the moment it arrives; real values
+  live in a vault and reattach only inside the tool that needs them — the model provider never
+  sees them. Erasing a person is one key delete.
+- **Gate every action.** Policy gates can permit/deny model and tool calls; tool calls can also
+  pause for durable human approval. Your rules, your policy engine.
+- **Audit, tamper-evident.** Governed calls land in a hash-chained, fail-closed audit log, kept
+  separate from operational logs.
+- **Provable, not claimed.** A compliance plugin can mark a gate *sealed*: the core runs sealed
+  gates ahead of ordinary ones and prevents replacing them, so nothing can short-circuit the
+  floor.
 
-## Provable, not claimed
+## What's built so far
 
-A compliance plugin can mark a gate **sealed**: the core guarantees it runs, and it **cannot
-be removed, replaced, or bypassed** — the assembly refuses to start if something tries. That's
-the difference between *claiming* a control is present and *proving* it to an auditor. The
-provability is the moat.
+Working, tested building blocks — implemented and green internally, **not** a consumable product:
 
-## Run it anywhere
+- **Governance core** — redact-at-edge + PII vault, ordered and sealed policy gates, durable
+  approvals, hash-chained audit, one-key subject erasure.
+- **Runtime** — a governed agent loop: model and tool calls through the fail-closed boundary,
+  approval park/resume, typed lifecycle events.
+- **Durable SQL engine** — leases, heartbeats, retry/dead-letter, lease recovery, and approval
+  park/resume; no Temporal required.
+- **Storage** — an adapter port + durable stores, with Drizzle / Kysely / Prisma / MongoDB /
+  SQLite adapters (SQLite is the tested path).
+- **Policy & identity** — pluggable authz (Cedar, better-auth) and identity resolution
+  (actor + team/role).
+- **API & adapter surface** — a typed API, a framework-agnostic request handler, a Next.js
+  binding, and a typed client.
 
-**One core, many forms.** The same governance ships as an **SDK**, a **local appliance**
-(single binary), an **on-prem / microVM** image (isolated per tenant), or a **hosted** service.
+The workspace typechecks and the test suite is green (200+ tests), including end-to-end
+integration tests of the real stack — only the LLM is mocked.
 
-## Is it GDPR compliant?
+## How it'll work (target API — will change)
 
-**Yes.**
+```ts
+const claw = createClaw({
+  model,                 // any Vercel AI SDK model
+  database: db,          // your database
+  policy: cedarPolicy(), // your authz
+  redactor,              // PII handling
+})
 
-*(Fine print, because we're that kind of project: euroclaw gives you provable, tamper-evident
-enforcement — the part that's hard to fake. A lawyer and an auditor sign the certificate;
-euroclaw makes sure there's something real to certify.)*
+// mount it (Next.js shown; the handler is framework-agnostic)
+export const { GET, POST } = toNextJsHandler(claw)
+```
+
+The pieces above exist and pass tests — but wiring them up as a real integrator isn't done yet
+(see below).
+
+## What's missing (the gap to a usable alpha)
+
+- **No auth at the HTTP edge** — the mounted routes have no authN/Z yet. Not safe to expose.
+  *(Deferred on purpose.)*
+- **The agent is single-shot** — no memory across runs; multi-turn + compaction is the active
+  build.
+- **No streaming** — responses come back whole, so no token-by-token UIs.
+- **Unsettled APIs** — expect breaking changes.
+
+### PII detection is weak right now
+
+The redaction *machinery* is solid (vault, deterministic placeholders, subject erasure) — but the
+actual PII **detection is poor today**. The default detector is effectively a no-op, so for now
+you have to bring your own. The plan is real ML-based detection (e.g. a
+[Presidio](https://github.com/microsoft/presidio)-style recognizer) and/or a clean
+bring-your-own-detector seam. Until then, don't rely on the built-in redaction to catch sensitive
+data.
+
+## Not started yet
+
+- **`@euroclaw/eu`** — the GDPR / EU AI-Act compliance plugin (the flagship regime).
+- **`@euroclaw/memory`** — governed recall / write / erase.
+- **`@euroclaw/skills`** — manifest-declared capabilities where `allowed_tools` is enforced
+  mechanically, not by prompt text.
+- **More framework adapters** — beyond Next.js (Express, Hono, …).
+- **Risky capabilities** — filesystem, shell, browser, MCP, WASM, each reporting its real
+  isolation posture.
+- **A self-firing scheduler** — today's cron is pull/drain only.
+- **A Temporal-based durable engine** (`@euroclaw/engine-temporal`) — for long-running
+  enterprise workflows, alongside the default SQL engine.
 
 ## License
 
