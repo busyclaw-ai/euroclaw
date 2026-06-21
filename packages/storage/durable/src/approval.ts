@@ -185,6 +185,17 @@ export function createApprovalStore(
 		},
 
 		async consume(id) {
+			const existingRow = await adapter.findOne<Record<string, unknown>>({
+				model,
+				where: [
+					{ field: "id", value: id },
+					{ field: "status", value: "approved", connector: "AND" },
+				],
+			});
+			if (!existingRow) return null;
+			const existing = fromRow(existingRow);
+			if (existing.expiresAt != null && existing.expiresAt < now()) return null;
+
 			// Atomic transition of the approved row by id — race-safe single use while preserving
 			// checkpoint metadata for crash recovery.
 			const row = await adapter.update<Record<string, unknown>>({
@@ -196,9 +207,7 @@ export function createApprovalStore(
 				update: { status: "consumed" },
 			});
 			if (!row) return null;
-			const record = fromRow(row);
-			if (record.expiresAt != null && record.expiresAt < now()) return null;
-			return record;
+			return fromRow(row);
 		},
 
 		async list(filter) {

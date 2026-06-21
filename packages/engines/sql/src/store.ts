@@ -772,18 +772,26 @@ export function createSqlEngineStore(
 			});
 			let count = 0;
 			for (const leaseRow of leaseRows) {
-				const lease = leaseFromRow(leaseRow);
+				const candidate = leaseFromRow(leaseRow);
+				const consumedLeaseRow = await adapter.consumeOne<unknown>({
+					model: leaseModel,
+					where: [
+						{ field: "id", value: candidate.id },
+						{
+							field: "expiresAt",
+							value: ts,
+							operator: "lte",
+							connector: "AND",
+						},
+					],
+				});
+				if (!consumedLeaseRow) continue;
+				const lease = leaseFromRow(consumedLeaseRow);
 				const taskRow = await adapter.findOne<unknown>({
 					model: taskModel,
 					where: [{ field: "id", value: lease.taskId }],
 				});
-				if (!taskRow) {
-					await adapter.delete({
-						model: leaseModel,
-						where: [{ field: "id", value: lease.id }],
-					});
-					continue;
-				}
+				if (!taskRow) continue;
 				const task = taskFromRow(taskRow);
 				const status: TaskStatus =
 					task.attempt >= task.maxAttempts ? "dead" : "pending";
@@ -808,10 +816,6 @@ export function createSqlEngineStore(
 				if (updated && status === "dead") {
 					await store.updateRun(task.runId, { status: "failed" });
 				}
-				await adapter.delete({
-					model: leaseModel,
-					where: [{ field: "id", value: lease.id }],
-				});
 				count++;
 			}
 			return count;

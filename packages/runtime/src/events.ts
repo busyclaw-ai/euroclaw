@@ -3,6 +3,9 @@ import { validationError } from "@euroclaw/errors";
 import { type as ark } from "arktype";
 
 export const RUNTIME_RECORDING_CONTEXT_KEY = `${RESERVED_CONTEXT_PREFIX}recording`;
+export const RUNTIME_RECORDING_OPTION: unique symbol = Symbol(
+	"euroclaw.runtime.recording",
+);
 
 export const runtimeRecordingContext = ark({
 	clawId: "string",
@@ -65,6 +68,7 @@ export const toolCompletedEvent = ark({
 	step: "number",
 	toolCallId: "string",
 	toolName: "string",
+	"effectId?": "string | undefined",
 	"output?": jsonValue.or("undefined"),
 });
 

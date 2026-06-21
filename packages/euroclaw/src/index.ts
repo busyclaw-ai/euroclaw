@@ -179,8 +179,10 @@ function assertCronHandler(input: {
 }
 
 function normalizeRoutePath(path: string): string {
-	if (!path.startsWith("/")) return `/${path}`;
-	return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+	const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
+	return withLeadingSlash.length > 1 && withLeadingSlash.endsWith("/")
+		? withLeadingSlash.slice(0, -1)
+		: withLeadingSlash;
 }
 
 function assertUniquePluginRoutes(plugins: readonly EuroclawPlugin[]): void {
@@ -250,5 +252,5 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 }
 
 export type { Runtime, RuntimeConfig, RuntimeResult } from "@euroclaw/runtime";
-export { govern, RUNTIME_RECORDING_CONTEXT_KEY } from "@euroclaw/runtime";
+export { govern } from "@euroclaw/runtime";
 export { createClawRuntimeEventSink } from "./events";

@@ -58,7 +58,10 @@ export function createClawRuntimeEventSink(
 					toolCallId: event.toolCallId,
 				});
 				if (call) {
-					await store.toolCalls.updateStatus(call.id, { status: "completed" });
+					await store.toolCalls.updateStatus(call.id, {
+						...(event.effectId ? { effectId: event.effectId } : {}),
+						status: "completed",
+					});
 				}
 				await store.toolResults.create({
 					clawId: recording.clawId,

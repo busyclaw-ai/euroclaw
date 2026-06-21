@@ -7,7 +7,7 @@
 // isn't forbidden — it just needs sign-off. ABAC works through principal/resource attributes and
 // tags carried on the synced entity directory.
 //
-// At request time you pass Cedar's own thing — a `principal` (and optional `confirmationUsed`):
+// At request time you pass Cedar's own thing — a `principal`:
 //   claw.run(prompt, { principal: "alice" })
 //
 // Uses cedar-wasm's stateless `isAuthorized` for clarity. When the PDP gets hot, swap to
@@ -37,8 +37,8 @@ import {
 	type PolicyRequest,
 } from "@euroclaw/policy-core";
 
-/** Cedar's request context: who is acting, and whether confirmation was used (needs-approval). */
-export type CedarContext = { principal: string; confirmationUsed?: boolean };
+/** Cedar's request context: who is acting. Approval state is derived server-side. */
+export type CedarContext = { principal: string };
 
 export type CedarEngineConfig = {
 	/** Cedar policy text — one or more `permit`/`forbid` statements (the org's policy slice). */
@@ -119,17 +119,14 @@ export function cedarEngine(config: CedarEngineConfig): PolicyEngine {
 
 	return {
 		authorize(req) {
-			const first = evaluate(req, req.context);
+			const baseContext = { ...req.context, [approvalFlag]: false };
+			const first = evaluate(req, baseContext);
 			if (first.error)
 				return { decision: "deny", reason: `cedar error: ${first.error}` };
 			if (first.allow) return { decision: "permit", policies: first.policies };
 
-			// Already confirmed → the deny is final (no point probing).
-			if (req.context[approvalFlag])
-				return { decision: "deny", policies: first.policies };
-
 			// Probe: would confirmation unblock it? If yes, it's needs-approval, not a hard deny.
-			const probed = evaluate(req, { ...req.context, [approvalFlag]: true });
+			const probed = evaluate(req, { ...baseContext, [approvalFlag]: true });
 			if (!probed.error && probed.allow) {
 				return {
 					decision: "needs-approval",
@@ -184,16 +181,15 @@ export function cedar(config: CedarPluginConfig): PolicyPlugin<CedarContext> {
 			// Membership resolved upstream (the claw's `membership`) flows into the Cedar context, so a
 			// team role drives the decision: `permit(...) when { context.role == "approver" }`. Reserved
 			// keys are read at runtime (they aren't part of CedarContext's caller-facing surface).
-			const bag = ctx as Record<string, unknown>;
-			const role = bag[ROLE_CONTEXT_KEY];
-			const team = bag[TEAM_CONTEXT_KEY];
+			const role = Reflect.get(ctx, ROLE_CONTEXT_KEY);
+			const team = Reflect.get(ctx, TEAM_CONTEXT_KEY);
 			return {
 				principal: { type: principalType, id: ctx.principal },
 				action: { type: "Action", id: call.name },
 				resource: { type: resourceType, id: resourceId(call.name) },
 				context: {
 					args: call.args,
-					[approvalFlag]: Boolean(ctx.confirmationUsed),
+					[approvalFlag]: false,
 					...(typeof role === "string" ? { role } : {}),
 					...(typeof team === "string" ? { team } : {}),
 				},

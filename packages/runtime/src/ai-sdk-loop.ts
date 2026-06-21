@@ -26,7 +26,7 @@ export type AiSdkLoopInput = {
 	now: () => string;
 	abortSignal?: RuntimeAbortSignal;
 	emitEvent?: (payload: RuntimeEventPayloadInput) => Promise<void>;
-	redactEventValue?: (value: unknown) => Promise<unknown>;
+	redactEventValue?: <T>(value: T) => Promise<T>;
 };
 
 function abortIfNeeded(signal: RuntimeAbortSignal | undefined): void {
@@ -68,6 +68,10 @@ function serializeToolOutput(output: unknown): string {
 	throw stateError("tool output is not JSON-serializable", {
 		reason: "JSON.stringify returned undefined",
 	});
+}
+
+async function redactForEvent<T>(input: AiSdkLoopInput, value: T): Promise<T> {
+	return input.redactEventValue ? await input.redactEventValue(value) : value;
 }
 
 export async function runAiSdkLoop(
@@ -114,14 +118,16 @@ export async function runAiSdkLoop(
 			);
 		}
 
-		input.state.currentMessages = messages;
+		input.state.currentMessages = await redactForEvent(input, messages);
 		const toolMessages: ModelMessage[] = [];
 		for (const toolCall of res.toolCalls) {
 			abortIfNeeded(input.abortSignal);
+			const redactedToolInput = await redactForEvent(input, toolCall.input);
 			input.state.currentToolCallId = toolCall.toolCallId;
 			input.state.currentToolName = toolCall.toolName;
-			input.state.currentToolInput = toolCall.input;
+			input.state.currentToolInput = redactedToolInput;
 			input.state.currentStep = step;
+			input.state.currentEffectId = undefined;
 			input.state.currentApprovalWaitId = `${input.now()}:${toolCall.toolCallId}`;
 			const pendingBefore = new Set(
 				(await input.core.approvals?.list({ status: "pending" }))?.map(
@@ -129,7 +135,7 @@ export async function runAiSdkLoop(
 				) ?? [],
 			);
 			await input.emitEvent?.({
-				args: toolCall.input,
+				args: redactedToolInput,
 				step,
 				toolCallId: toolCall.toolCallId,
 				toolName: toolCall.toolName,
@@ -138,7 +144,7 @@ export async function runAiSdkLoop(
 			let result: Awaited<ReturnType<Governance["handleToolCall"]>>;
 			try {
 				result = await input.core.handleToolCall(
-					{ name: toolCall.toolName, args: toolCall.input },
+					{ name: toolCall.toolName, args: redactedToolInput },
 					input.ctx,
 				);
 			} catch (err) {
@@ -209,6 +215,9 @@ export async function runAiSdkLoop(
 					? await input.redactEventValue(result.output)
 					: result.output;
 				await input.emitEvent?.({
+					...(input.state.currentEffectId !== undefined
+						? { effectId: input.state.currentEffectId }
+						: {}),
 					...(redactedOutput !== undefined ? { output: redactedOutput } : {}),
 					step,
 					toolCallId: toolCall.toolCallId,

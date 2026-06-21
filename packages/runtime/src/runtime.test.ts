@@ -13,8 +13,8 @@ import { describe, expect, it } from "vitest";
 import {
 	createRuntime,
 	govern,
-	RUNTIME_RECORDING_CONTEXT_KEY,
 	type RuntimeEvent,
+	runtimeRunOptionsWithRecording,
 } from "./index";
 
 const emailDetector: Detector = (text) => {
@@ -184,13 +184,15 @@ describe("@euroclaw/runtime", () => {
 			},
 		});
 
-		const result = await runtime.run("hello", {
-			[RUNTIME_RECORDING_CONTEXT_KEY]: {
+		const result = await runtime.run(
+			"hello",
+			undefined,
+			runtimeRunOptionsWithRecording(undefined, {
 				clawId: "claw-1",
 				runId: "run-1",
 				threadId: "thread-1",
-			},
-		} as never);
+			}),
+		);
 
 		expect(result).toMatchObject({ status: "completed", text: "done" });
 		expect(completedSinkFinished).toBe(true);
@@ -230,14 +232,16 @@ describe("@euroclaw/runtime", () => {
 		);
 	});
 
-	it("rejects invalid runtime recording metadata", async () => {
-		const runtime = createRuntime({ model: textOnlyModel("done") });
+	it("ignores caller-supplied reserved recording context", async () => {
+		const events: RuntimeEvent[] = [];
 
-		await expect(
-			runtime.run("hello", {
-				[RUNTIME_RECORDING_CONTEXT_KEY]: { clawId: "claw-1" },
-			} as never),
-		).rejects.toThrow(/runtime recording context invalid/);
+		const result = await createRuntime({
+			model: textOnlyModel("done"),
+			events: { emit: (event) => events.push(event) },
+		}).run("hello", { euroclaw__recording: { clawId: "claw-1" } });
+
+		expect(result.status).toBe("completed");
+		expect(events.every((event) => event.recording === undefined)).toBe(true);
 	});
 
 	it("emits waiting approval events", async () => {
@@ -269,13 +273,15 @@ describe("@euroclaw/runtime", () => {
 			},
 		});
 
-		const result = await runtime.run("email alice@personal.com", {
-			[RUNTIME_RECORDING_CONTEXT_KEY]: {
+		const result = await runtime.run(
+			"email alice@personal.com",
+			undefined,
+			runtimeRunOptionsWithRecording(undefined, {
 				clawId: "claw-1",
 				runId: "run-approval",
 				threadId: "thread-1",
-			},
-		} as never);
+			}),
+		);
 
 		expect(result.status).toBe("waiting_approval");
 		expect(events.map((event) => event.type)).toEqual([
@@ -302,6 +308,15 @@ describe("@euroclaw/runtime", () => {
 			throw new Error("expected waiting approval event");
 		}
 		expect(events[3].approvalIds).toHaveLength(1);
+		expect(JSON.stringify(events)).not.toContain("alice@personal.com");
+		expect(events[0]).toMatchObject({
+			prompt: expect.stringMatching(/\{\{pii:[a-z0-9]+\}\}/),
+		});
+		expect(events[1]).toMatchObject({
+			args: { to: expect.stringMatching(/^\{\{pii:/) },
+		});
+		const approvals = await runtime.approvals?.list({ status: "pending" });
+		expect(JSON.stringify(approvals)).not.toContain("alice@personal.com");
 	});
 
 	it("fails closed before provider execution when a model boundary asks for an approval wait", async () => {

@@ -7,6 +7,7 @@ import {
 	type ContextResolver,
 	ROLE_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
+	TENANT_CONTEXT_KEY,
 	type TurnContext,
 } from "@euroclaw/core";
 
@@ -22,6 +23,11 @@ export type Membership = { team: string; role: string };
 export type MembershipResolver = (
 	ctx: TurnContext,
 ) => Membership | undefined | Promise<Membership | undefined>;
+
+/** Resolves the tenant boundary for durable resources and PII mapping scopes. */
+export type TenantResolver = (
+	ctx: TurnContext,
+) => string | undefined | Promise<string | undefined>;
 
 /** Build an IdentityResolver from any session-getter — better-auth's, your own — just `getSession`. */
 export function sessionIdentity(deps: {
@@ -58,10 +64,15 @@ export function roleMembership(deps: {
 export function composeContext(parts: {
 	identity?: IdentityResolver;
 	membership?: MembershipResolver;
+	tenant?: TenantResolver;
 }): ContextResolver | undefined {
-	const { identity, membership } = parts;
-	if (!identity && !membership) return undefined;
+	const { identity, membership, tenant } = parts;
+	if (!identity && !membership && !tenant) return undefined;
 	return async (ctx) => {
+		if (tenant) {
+			const tenantId = await tenant(ctx);
+			if (typeof tenantId === "string") ctx[TENANT_CONTEXT_KEY] = tenantId;
+		}
 		if (identity) {
 			const actor = await identity(ctx);
 			if (typeof actor === "string") ctx[ACTOR_CONTEXT_KEY] = actor;

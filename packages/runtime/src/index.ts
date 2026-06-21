@@ -15,6 +15,7 @@ export {
 	createRuntimeEvent,
 	emitRuntimeEvent,
 	RUNTIME_RECORDING_CONTEXT_KEY,
+	RUNTIME_RECORDING_OPTION,
 	runtimeEvent,
 	runtimeRecordingContext,
 } from "./events";
@@ -38,4 +39,5 @@ export {
 	RuntimeWaitingApprovalResult,
 	recordingFromRuntimeApprovalMetadata,
 	runtimeApprovalMetadata,
+	runtimeRunOptionsWithRecording,
 } from "./runtime";

@@ -100,15 +100,23 @@ describe("createClaw send", () => {
 			state: { approvalIds: expect.any(Array) },
 			threadId: thread.id,
 		});
-		expect(
-			await claw.api.getToolCallByProviderId({
-				runId: "run-approval",
-				toolCallId: "c1",
-			}),
-		).toMatchObject({
+		const toolCall = await claw.api.getToolCallByProviderId({
+			runId: "run-approval",
+			toolCallId: "c1",
+		});
+		expect(toolCall).toMatchObject({
+			args: { to: expect.stringMatching(/^\{\{pii:/) },
 			status: "waiting_approval",
 			toolName: "send_email",
 		});
+		expect(JSON.stringify(toolCall)).not.toContain("alice@personal.com");
+		const approvals = await claw.api.listApprovals({ status: "pending" });
+		expect(JSON.stringify(approvals)).not.toContain("alice@personal.com");
+		expect(
+			JSON.stringify(
+				await claw.api.getLatestCheckpoint({ runId: "run-approval" }),
+			),
+		).not.toContain("alice@personal.com");
 	});
 
 	it("records approved resume into the original thread and run", async () => {

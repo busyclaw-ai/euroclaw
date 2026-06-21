@@ -42,7 +42,7 @@ describe("@euroclaw/policy-cedar — Cedar PDP", () => {
 		expect(r.status).toBe("denied");
 	});
 
-	it("needs-approval: a confirm-gated policy blocks, then permits once confirmed", async () => {
+	it("needs-approval: a confirm-gated policy cannot be satisfied by caller context", async () => {
 		const policies = `permit(principal, action == Action::"refund", resource) when { context.confirmationUsed };`;
 		const core = coreWith({ policies });
 
@@ -52,11 +52,12 @@ describe("@euroclaw/policy-cedar — Cedar PDP", () => {
 		);
 		expect(unconfirmed.status).toBe("needs-approval");
 
+		const spoofed = { principal: "alice", confirmationUsed: true };
 		const confirmed = await core.handleToolCall(
 			{ name: "refund", args: {} },
-			{ principal: "alice", confirmationUsed: true },
+			spoofed,
 		);
-		expect(confirmed.status).toBe("ok");
+		expect(confirmed.status).toBe("needs-approval");
 	});
 
 	it("ABAC: a tag on the principal decides — assign a tag, the policy sorts it out", async () => {

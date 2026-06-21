@@ -1,9 +1,10 @@
-// The redactor: PII in → stable placeholders out, and back again. The governance talks only to the
+// The redactor: PII in → scoped opaque placeholders out, and back again. The governance talks only to the
 // redact/rehydrate transform; a PiiMappingStore is the re-identification store that maps each
 // placeholder back to original PII. Deleting a subject's mappings is the erasure primitive.
 // See docs/architecture/03-pii-and-erasure.md.
 
 import { validationError } from "@euroclaw/errors";
+import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
 import { type } from "arktype";
 import type { EntityRecord } from "../entity";
 import { entity, field } from "../entity";
@@ -73,7 +74,10 @@ export type PiiMappingStore = {
 		placeholder: string,
 		ctx?: RehydrationContext,
 	) => string | null | Promise<string | null>;
-	deleteForSubject: (subjectId: string) => void | Promise<void>;
+	deleteForSubject: (
+		subjectId: string,
+		ctx?: Pick<RedactionContext, "tenantId">,
+	) => void | Promise<void>;
 };
 
 export const redactionContext = type({
@@ -124,17 +128,22 @@ const PLACEHOLDER = /\{\{pii:[a-z0-9]+\}\}/g;
  */
 export const noopDetector: Detector = () => [];
 
-/** Deterministic so the same value always maps to the same token. */
-function tokenHash(s: string): string {
-	let h = 5381;
-	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
-	return h.toString(36);
+function newPlaceholder(): string {
+	return `{{pii:${bytesToHex(randomBytes(16))}}}`;
+}
+
+function scopeKey(ctx?: RedactionContext): string {
+	return [
+		ctx?.tenantId ?? "",
+		ctx?.subjectId ?? "",
+		ctx?.memoryNamespace ?? "",
+	].join(":");
 }
 
 export function createMemoryPiiMappingStore(): PiiMappingStore {
 	const byKey = new Map<string, PiiMapping>();
-	const keyFor = (placeholder: string, memoryNamespace?: string): string =>
-		`${memoryNamespace ?? ""}:${placeholder}`;
+	const keyFor = (placeholder: string, ctx?: RedactionContext): string =>
+		`${scopeKey(ctx)}:${placeholder}`;
 	return {
 		durable: false,
 		save(mapping) {
@@ -142,16 +151,19 @@ export function createMemoryPiiMappingStore(): PiiMappingStore {
 			if (valid instanceof type.errors) {
 				throw validationError("invalid PII mapping", valid.summary);
 			}
-			byKey.set(keyFor(valid.placeholder, valid.memoryNamespace), valid);
+			byKey.set(keyFor(valid.placeholder, valid), valid);
 		},
 		resolve(placeholder, ctx) {
-			return (
-				byKey.get(keyFor(placeholder, ctx?.memoryNamespace))?.original ?? null
-			);
+			return byKey.get(keyFor(placeholder, ctx))?.original ?? null;
 		},
-		deleteForSubject(subjectId) {
+		deleteForSubject(subjectId, ctx) {
 			for (const [key, mapping] of byKey) {
-				if (mapping.subjectId === subjectId) byKey.delete(key);
+				if (
+					mapping.subjectId === subjectId &&
+					(ctx?.tenantId === undefined || mapping.tenantId === ctx.tenantId)
+				) {
+					byKey.delete(key);
+				}
 			}
 		},
 	};
@@ -222,10 +234,7 @@ export function createStoredRedactor(options: StoredRedactorOptions): Redactor {
 		let out = "";
 		let last = 0;
 		for (const span of spans) {
-			const hashInput = ctx?.memoryNamespace
-				? `${ctx.memoryNamespace}:${span.kind}:${span.value}`
-				: `${span.kind}:${span.value}`;
-			const placeholder = `{{pii:${tokenHash(hashInput)}}}`;
+			const placeholder = newPlaceholder();
 			await mappings.save({
 				placeholder,
 				original: span.value,

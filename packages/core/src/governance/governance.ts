@@ -188,6 +188,8 @@ export function createGovernance<const Config extends GovernanceConfig>(
 	const before: Gate<TurnContext>[] = [];
 	const after: AfterGate<TurnContext>[] = [];
 	const sealed = new Set<string>();
+	const boundaryGateIds = new Set<string>();
+	const toolGateIds = new Set<string>();
 
 	// The governance wires nothing of its own — except two observer after-gates, each *if* you asked:
 	// audit (record every outcome) and approval (persist a needs-approval so it survives a restart).
@@ -201,7 +203,20 @@ export function createGovernance<const Config extends GovernanceConfig>(
 	function add(
 		list: { id: string; sealed?: boolean }[],
 		gate: { id: string; sealed?: boolean },
+		kind?: "boundary" | "tool",
 	): void {
+		if (kind === "boundary" && toolGateIds.has(gate.id)) {
+			throw stateError(
+				`gate "${gate.id}" is already registered as a tool gate`,
+				{ gateId: gate.id },
+			);
+		}
+		if (kind === "tool" && boundaryGateIds.has(gate.id)) {
+			throw stateError(
+				`gate "${gate.id}" is already registered as a boundary gate`,
+				{ gateId: gate.id },
+			);
+		}
 		const i = list.findIndex((g) => g.id === gate.id);
 		if (i !== -1) {
 			if (sealed.has(gate.id) || list[i]?.sealed) {
@@ -221,12 +236,15 @@ export function createGovernance<const Config extends GovernanceConfig>(
 			list.push(gate);
 		}
 		if (gate.sealed) sealed.add(gate.id);
+		if (kind === "boundary") boundaryGateIds.add(gate.id);
+		if (kind === "tool") toolGateIds.add(gate.id);
 	}
 
 	// Plugins install their gates now; their folded types are applied at compile time.
 	for (const plugin of plugins) {
-		for (const gate of plugin.boundaryGates ?? []) add(boundaryBefore, gate);
-		for (const gate of plugin.gates ?? []) add(before, gate);
+		for (const gate of plugin.boundaryGates ?? [])
+			add(boundaryBefore, gate, "boundary");
+		for (const gate of plugin.gates ?? []) add(before, gate, "tool");
 		for (const gate of plugin.afterGates ?? []) add(after, gate);
 	}
 
@@ -369,12 +387,12 @@ export function createGovernance<const Config extends GovernanceConfig>(
 
 	const api: Governance<Config> = {
 		registerBoundaryGate(gate) {
-			add(boundaryBefore, gate);
+			add(boundaryBefore, gate, "boundary");
 			return api;
 		},
 
 		registerGate(gate) {
-			add(before, gate);
+			add(before, gate, "tool");
 			return api;
 		},
 

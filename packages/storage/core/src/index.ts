@@ -164,6 +164,7 @@ export function matchWhere(
 /** A zero-dependency in-memory Adapter — the dev/test default. Rows are stored per model. */
 export function memoryAdapter(): Adapter {
 	const db = new Map<string, Record<string, unknown>[]>();
+	let transactionQueue = Promise.resolve();
 	const make = (state: Map<string, Record<string, unknown>[]>): Adapter => {
 		const table = (model: string): Record<string, unknown>[] => {
 			let t = state.get(model);
@@ -241,16 +242,26 @@ export function memoryAdapter(): Adapter {
 				return removed ? out(removed) : null;
 			},
 			async transaction(fn) {
+				const previous = transactionQueue;
+				let release = () => {};
+				transactionQueue = new Promise<void>((resolve) => {
+					release = resolve;
+				});
+				await previous;
 				const snapshot = new Map<string, Record<string, unknown>[]>(
 					[...state.entries()].map(([model, rows]) => [
 						model,
 						rows.map((row) => ({ ...row })),
 					]),
 				);
-				const result = await fn(make(snapshot));
-				state.clear();
-				for (const [model, rows] of snapshot) state.set(model, rows);
-				return result;
+				try {
+					const result = await fn(make(snapshot));
+					state.clear();
+					for (const [model, rows] of snapshot) state.set(model, rows);
+					return result;
+				} finally {
+					release();
+				}
 			},
 		};
 	};

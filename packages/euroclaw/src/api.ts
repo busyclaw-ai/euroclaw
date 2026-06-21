@@ -39,6 +39,7 @@ import {
 	createToolCallInput,
 	createToolResultInput,
 	jsonObject,
+	RESERVED_CONTEXT_PREFIX,
 	stateError,
 	threadEntity,
 	threadRecord,
@@ -56,13 +57,13 @@ import type {
 	EngineStartRunInput,
 } from "@euroclaw/engine-core";
 import {
-	RUNTIME_RECORDING_CONTEXT_KEY,
 	type RunContext,
 	type Runtime,
 	type RuntimeConfig,
 	type RuntimeResult,
 	type RuntimeRunOptions,
 	recordingFromRuntimeApprovalMetadata,
+	runtimeRunOptionsWithRecording,
 } from "@euroclaw/runtime";
 import { type as ark } from "arktype";
 
@@ -463,6 +464,19 @@ function requireEffects(effects: EffectStore | undefined): EffectStore {
 	return effects;
 }
 
+function assertNoReservedContext(ctx: unknown): void {
+	if (ctx === undefined || ctx === null || typeof ctx !== "object") return;
+	for (const key of Object.keys(ctx)) {
+		if (key.startsWith(RESERVED_CONTEXT_PREFIX)) {
+			throw validationError(
+				"claw.api context invalid",
+				`reserved context key is not accepted: ${key}`,
+				{ key },
+			);
+		}
+	}
+}
+
 async function requireClawRecord(
 	store: ClawsStore,
 	id: string,
@@ -599,6 +613,7 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 		listMessages: (args) => store().messages.listForThread(args),
 
 		async sendMessage(args) {
+			assertNoReservedContext(args.ctx);
 			const clawsStore = store();
 			const runId = args.runId ?? newId("run");
 			const userMessage = await clawsStore.messages.append({
@@ -609,16 +624,16 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 				threadId: args.threadId,
 				visibility: "user",
 			});
-			const ctx = {
-				...((args.ctx ?? {}) as Record<string, unknown>),
-				[RUNTIME_RECORDING_CONTEXT_KEY]: {
+			const result = await context.runtime.run(
+				args.message,
+				args.ctx as never,
+				runtimeRunOptionsWithRecording(undefined, {
 					clawId: args.clawId,
 					runId,
 					threadId: args.threadId,
 					userMessageId: userMessage.id,
-				},
-			};
-			const result = await context.runtime.run(args.message, ctx as never);
+				}),
+			);
 			return { result, userMessage };
 		},
 
@@ -636,9 +651,12 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 		getCheckpoint: ({ id }) => store().checkpoints.get(id),
 		getLatestCheckpoint: ({ runId }) => store().checkpoints.latestForRun(runId),
 
-		run: ({ prompt, ctx, options }) =>
-			context.runtime.run(prompt, ctx as never, options),
+		run: ({ prompt, ctx, options }) => {
+			assertNoReservedContext(ctx);
+			return context.runtime.run(prompt, ctx as never, options);
+		},
 		async continueRun({ approvalId, ctx, options }) {
+			assertNoReservedContext(ctx);
 			const approval = await context.runtime.approvals?.get(approvalId);
 			const recording = approval
 				? recordingFromRuntimeApprovalMetadata(approval.metadata)
@@ -648,11 +666,8 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 			}
 			return context.runtime.continueRun(
 				approvalId,
-				{
-					...((ctx ?? {}) as Record<string, unknown>),
-					[RUNTIME_RECORDING_CONTEXT_KEY]: recording,
-				} as never,
-				options,
+				ctx as never,
+				runtimeRunOptionsWithRecording(options, recording),
 			);
 		},
 
@@ -668,9 +683,14 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 
 		getEffect: ({ id }) => requireEffects(context.effects).get(id),
 
-		startRun: (args) => requireEngine(context.engine).startRun(args),
-		continueEngineRun: (args) =>
-			requireEngine(context.engine).continueRun(args),
+		startRun: (args) => {
+			assertNoReservedContext(args.ctx);
+			return requireEngine(context.engine).startRun(args);
+		},
+		continueEngineRun: (args) => {
+			assertNoReservedContext(args.ctx);
+			return requireEngine(context.engine).continueRun(args);
+		},
 		getRun: ({ id }) => requireRuns(context.runs).get(id),
 		listRunEvents: ({ runId }) => requireRuns(context.runs).events(runId),
 	};

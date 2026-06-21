@@ -146,6 +146,16 @@ function toKysely(database: KyselyDatabase): Kysely<DB> {
  */
 export function kyselyAdapter(database: KyselyDatabase): Adapter {
 	const db = toKysely(database);
+	const findOne = async <T>(input: {
+		model: string;
+		where: Where[];
+	}): Promise<T | null> => {
+		let q = db.selectFrom(input.model).selectAll();
+		const e = whereExpr(input.where);
+		if (e !== undefined) q = q.where(e);
+		const row = await q.executeTakeFirst();
+		return (row ?? null) as never;
+	};
 	return {
 		id: "kysely",
 
@@ -159,11 +169,7 @@ export function kyselyAdapter(database: KyselyDatabase): Adapter {
 		},
 
 		async findOne({ model, where }) {
-			let q = db.selectFrom(model).selectAll();
-			const e = whereExpr(where);
-			if (e !== undefined) q = q.where(e);
-			const row = await q.executeTakeFirst();
-			return (row ?? null) as never;
+			return findOne({ model, where });
 		},
 
 		async findMany({ model, where, limit, offset, sortBy }) {
@@ -185,7 +191,10 @@ export function kyselyAdapter(database: KyselyDatabase): Adapter {
 		},
 
 		async update({ model, where, update }) {
-			let q = db.updateTable(model).set(update);
+			const before = await findOne<{ id?: string | number }>({ model, where });
+			const id = before?.id;
+			if (id === undefined || id === null) return null;
+			let q = db.updateTable(model).set(update).where("id", "=", id);
 			const e = whereExpr(where);
 			if (e !== undefined) q = q.where(e);
 			const row = await q.returningAll().executeTakeFirst();
@@ -201,7 +210,10 @@ export function kyselyAdapter(database: KyselyDatabase): Adapter {
 		},
 
 		async delete({ model, where }) {
-			let q = db.deleteFrom(model);
+			const before = await findOne<{ id?: string | number }>({ model, where });
+			const id = before?.id;
+			if (id === undefined || id === null) return;
+			let q = db.deleteFrom(model).where("id", "=", id);
 			const e = whereExpr(where);
 			if (e !== undefined) q = q.where(e);
 			await q.execute();

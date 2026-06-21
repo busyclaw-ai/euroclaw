@@ -48,37 +48,43 @@ function createSqlEngineHandle(input: {
 	return {
 		kind: "sql",
 		async startRun(startInput: EngineStartRunInput): Promise<EngineRunHandle> {
-			const run = await input.config.store.createRun({
-				...startInput.run,
-				input: { prompt: startInput.prompt, ctx: startInput.ctx ?? {} },
-			});
-			await input.config.store.enqueueTask({
-				kind: RUNTIME_RUN_TASK,
-				payload: {
-					prompt: startInput.prompt,
-					...(startInput.ctx ? { ctx: startInput.ctx } : {}),
-				},
-				runId: run.id,
+			const run = await input.config.store.transaction(async (store) => {
+				const run = await store.createRun({
+					...startInput.run,
+					input: { prompt: startInput.prompt, ctx: startInput.ctx ?? {} },
+				});
+				await store.enqueueTask({
+					kind: RUNTIME_RUN_TASK,
+					payload: {
+						prompt: startInput.prompt,
+						...(startInput.ctx ? { ctx: startInput.ctx } : {}),
+					},
+					runId: run.id,
+				});
+				return run;
 			});
 			return { id: run.id };
 		},
 		async continueRun(
 			continueInput: EngineContinueRunInput,
 		): Promise<EngineRunHandle> {
-			const run = await input.config.store.createRun({
-				...continueInput.run,
-				input: {
-					approvalId: continueInput.approvalId,
-					ctx: continueInput.ctx ?? {},
-				},
-			});
-			await input.config.store.enqueueTask({
-				kind: RUNTIME_CONTINUE_RUN_TASK,
-				payload: {
-					approvalId: continueInput.approvalId,
-					...(continueInput.ctx ? { ctx: continueInput.ctx } : {}),
-				},
-				runId: run.id,
+			const run = await input.config.store.transaction(async (store) => {
+				const run = await store.createRun({
+					...continueInput.run,
+					input: {
+						approvalId: continueInput.approvalId,
+						ctx: continueInput.ctx ?? {},
+					},
+				});
+				await store.enqueueTask({
+					kind: RUNTIME_CONTINUE_RUN_TASK,
+					payload: {
+						approvalId: continueInput.approvalId,
+						...(continueInput.ctx ? { ctx: continueInput.ctx } : {}),
+					},
+					runId: run.id,
+				});
+				return run;
 			});
 			return { id: run.id };
 		},

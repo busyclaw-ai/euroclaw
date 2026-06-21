@@ -6,11 +6,14 @@
 import { createGovernance } from "@euroclaw/core";
 import { cedar } from "./index";
 
-// A core governed by Cedar → its `{ principal }` context is folded on (and confirmationUsed is optional).
+// A core governed by Cedar → its `{ principal }` context is folded on.
 const governed = createGovernance({ plugins: [cedar({ policies: "" })] });
 
-// ✅ principal accepted (string); confirmationUsed is optional.
+// ✅ principal accepted (string).
 void governed.handleToolCall({ name: "x", args: {} }, { principal: "alice" });
+
+// ❌ approval state is derived server-side, not caller-provided.
+// @ts-expect-error
 void governed.handleToolCall(
 	{ name: "x", args: {} },
 	{ principal: "alice", confirmationUsed: true },

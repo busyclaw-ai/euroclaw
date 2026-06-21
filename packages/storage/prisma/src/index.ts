@@ -13,14 +13,14 @@ import type { Adapter, Where } from "@euroclaw/storage-core";
 
 /** The subset of a Prisma model delegate this adapter uses (your generated client satisfies it). */
 export type PrismaDelegate = {
-	create: (args: { data: unknown }) => Promise<unknown>;
-	findFirst: (args: { where?: unknown }) => Promise<unknown>;
-	findMany: (args: {
+	create: <T = unknown>(args: { data: unknown }) => Promise<T>;
+	findFirst: <T = unknown>(args: { where?: unknown }) => Promise<T | null>;
+	findMany: <T = unknown>(args: {
 		where?: unknown;
 		orderBy?: unknown;
 		take?: number;
 		skip?: number;
-	}) => Promise<unknown[]>;
+	}) => Promise<T[]>;
 	updateMany: (args: {
 		where?: unknown;
 		data: unknown;
@@ -64,17 +64,6 @@ export function toWhere(where: Where[]): Record<string, unknown> {
 	return combined ?? {};
 }
 
-function whereAfterUpdate(
-	where: Where[],
-	update: Record<string, unknown>,
-): Where[] {
-	return where.map((clause) =>
-		Object.hasOwn(update, clause.field)
-			? { ...clause, value: update[clause.field] as Where["value"] }
-			: clause,
-	);
-}
-
 const delegate = (p: PrismaLike, name: string): PrismaDelegate => {
 	const d = (p as unknown as Record<string, PrismaDelegate>)[name];
 	if (!d)
@@ -116,19 +105,19 @@ export function prismaAdapter(prisma: PrismaLike): Adapter {
 		// Prisma's `update`/`delete` require a unique where; the generic Where[] uses updateMany/deleteMany.
 		async update({ model, where, update }) {
 			const d = delegate(prisma, model);
-			const before = await d.findFirst({ where: toWhere(where) });
-			if (!before) return null;
-			const { count } = await d.updateMany({
+			const before = await d.findFirst<{ id?: string | number }>({
 				where: toWhere(where),
+			});
+			if (!before) return null;
+			const id = before.id;
+			if (id === undefined || id === null) return null;
+			const { count } = await d.updateMany({
+				where: { id },
 				data: update,
 			});
 			if (count < 1) return null;
-			const id = (before as Record<string, unknown>).id;
 			return ((await d.findFirst({
-				where:
-					id === undefined || id === null
-						? toWhere(whereAfterUpdate(where, update))
-						: { id },
+				where: { id },
 			})) ?? null) as never;
 		},
 
@@ -142,7 +131,13 @@ export function prismaAdapter(prisma: PrismaLike): Adapter {
 		},
 
 		async delete({ model, where }) {
-			await delegate(prisma, model).deleteMany({ where: toWhere(where) });
+			const d = delegate(prisma, model);
+			const before = await d.findFirst<{ id?: string | number }>({
+				where: toWhere(where),
+			});
+			const id = before?.id;
+			if (id === undefined || id === null) return;
+			await d.deleteMany({ where: { id } });
 		},
 
 		async deleteMany({ model, where }) {
@@ -153,14 +148,18 @@ export function prismaAdapter(prisma: PrismaLike): Adapter {
 
 		async consumeOne({ model, where }) {
 			return (await prisma.$transaction(async (tx) => {
-				const row = await delegate(tx, model).findFirst({
+				const row = await delegate(tx, model).findFirst<{
+					id?: string | number;
+				}>({
 					where: toWhere(where),
 				});
 				if (!row) return null;
+				const id = row.id;
+				if (id === undefined || id === null) return null;
 				// Only the tx whose delete actually removed the row "wins" — race-safe even if two
 				// transactions both read it before either deletes (the loser sees count 0 → null).
 				const { count } = await delegate(tx, model).deleteMany({
-					where: { id: (row as { id: unknown }).id },
+					where: { id },
 				});
 				return count === 1 ? row : null;
 			})) as never;

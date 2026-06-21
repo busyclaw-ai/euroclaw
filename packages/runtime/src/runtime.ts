@@ -10,10 +10,13 @@ import type {
 	ToolEffectPolicy,
 } from "@euroclaw/core";
 import {
+	CLAW_ID_CONTEXT_KEY,
 	createGovernance,
 	jsonValue as jsonValueSchema,
 	RESERVED_CONTEXT_PREFIX,
+	RUN_ID_CONTEXT_KEY,
 	redactionContextFrom,
+	THREAD_ID_CONTEXT_KEY,
 } from "@euroclaw/core";
 import {
 	configurationError,
@@ -33,16 +36,18 @@ import {
 	composeContext,
 	type IdentityResolver,
 	type MembershipResolver,
+	type TenantResolver,
 } from "./context";
 import { type RuntimeDatabase, resolveDatabase } from "./database";
 import {
 	createRuntimeEvent,
 	emitRuntimeEvent,
 	eventSinksFrom,
+	RUNTIME_RECORDING_OPTION,
 	type RuntimeEventPayloadInput,
 	type RuntimeEventSink,
+	type RuntimeRecordingContext,
 	runtimeRecordingContext,
-	runtimeRecordingContextFrom,
 } from "./events";
 import {
 	createRunState,
@@ -54,7 +59,10 @@ import {
 export type RuntimeModel = Parameters<typeof wrapLanguageModel>[0]["model"];
 
 export type RuntimeAbortSignal = { readonly aborted: boolean };
-export type RuntimeRunOptions = { abortSignal?: RuntimeAbortSignal };
+export type RuntimeRunOptions = {
+	abortSignal?: RuntimeAbortSignal;
+	readonly [RUNTIME_RECORDING_OPTION]?: RuntimeRecordingContext;
+};
 
 export type RuntimeEnvironment = {
 	now?: () => string;
@@ -70,6 +78,7 @@ export type RuntimeConfig = {
 	tools?: ToolSet;
 	system?: string;
 	redactor?: Redactor;
+	tenant?: TenantResolver;
 	identity?: IdentityResolver;
 	membership?: MembershipResolver;
 	audit?: AuditSink;
@@ -118,13 +127,12 @@ export type RuntimeResult = typeof RuntimeResult.infer;
 
 export type RunContext<Config extends RuntimeConfig> = InferContext<Config>;
 
-type RunArgs<Config extends RuntimeConfig> =
-	keyof RunContext<Config> extends never
-		? [prompt: string, ctx?: RunContext<Config>, options?: RuntimeRunOptions]
-		: [prompt: string, ctx: RunContext<Config>, options?: RuntimeRunOptions];
-
 export type Runtime<Config extends RuntimeConfig = RuntimeConfig> = {
-	run: (...args: RunArgs<Config>) => Promise<RuntimeResult>;
+	run: (
+		prompt: string,
+		ctx?: RunContext<Config>,
+		options?: RuntimeRunOptions,
+	) => Promise<RuntimeResult>;
 	continueRun: (
 		id: string,
 		ctx?: RunContext<Config>,
@@ -134,6 +142,13 @@ export type Runtime<Config extends RuntimeConfig = RuntimeConfig> = {
 	readonly approvals?: ApprovalStore;
 	readonly effects?: EffectStore;
 };
+
+export function runtimeRunOptionsWithRecording(
+	options: RuntimeRunOptions | undefined,
+	recording: RuntimeRecordingContext,
+): RuntimeRunOptions {
+	return { ...(options ?? {}), [RUNTIME_RECORDING_OPTION]: recording };
+}
 
 function stripReserved(ctx: Record<string, unknown>): Record<string, unknown> {
 	const out: Record<string, unknown> = {};
@@ -257,6 +272,10 @@ function startEffectHeartbeat(input: {
 	};
 }
 
+const runtimeModelMessage = ark({ role: "string", content: "unknown" }).narrow(
+	(value): value is ModelMessage => value.role.length > 0,
+);
+
 export const runtimeApprovalMetadata = ark({
 	version: "'runtime.ai-sdk.v1'",
 	waitId: "string",
@@ -264,7 +283,7 @@ export const runtimeApprovalMetadata = ark({
 	toolCallId: "string",
 	toolName: "string",
 	toolInput: "unknown",
-	messages: ark("unknown").array(),
+	messages: runtimeModelMessage.array(),
 	"recording?": runtimeRecordingContext.or("undefined"),
 });
 export type RuntimeApprovalMetadata = typeof runtimeApprovalMetadata.infer;
@@ -283,7 +302,7 @@ export function parseRuntimeApprovalMetadata(
 
 export function recordingFromRuntimeApprovalMetadata(
 	metadata: unknown,
-): ReturnType<typeof runtimeRecordingContextFrom> {
+): RuntimeRecordingContext | undefined {
 	const valid = parseRuntimeApprovalMetadata(metadata);
 	return valid.recording;
 }
@@ -310,10 +329,11 @@ export function createRuntime<const Config extends RuntimeConfig>(
 	const resolveContext = composeContext({
 		identity: config.identity,
 		membership: config.membership,
+		tenant: config.tenant,
 	});
 	const modelTools = modelFacingTools(tools);
 	const emitEvent = (
-		recording: ReturnType<typeof runtimeRecordingContextFrom>,
+		recording: RuntimeRecordingContext | undefined,
 		payload: RuntimeEventPayloadInput,
 	) =>
 		emitRuntimeEvent(
@@ -326,10 +346,31 @@ export function createRuntime<const Config extends RuntimeConfig>(
 			}),
 		);
 
+	const redactEventValue = async <T>(
+		value: T,
+		ctx: Record<string, unknown>,
+	): Promise<T> =>
+		config.redactor
+			? config.redactor.redactValue(value, redactionContextFrom(ctx))
+			: value;
+
 	const createRunCore = (
 		state: RunState,
 		approvalStoreOverride = approvalStore,
 	) => {
+		const resolveGovernanceContext = async (
+			ctx: Record<string, unknown>,
+		): Promise<Record<string, unknown>> => {
+			const resolved = resolveContext ? await resolveContext(ctx) : ctx;
+			if (state.recording) {
+				resolved[CLAW_ID_CONTEXT_KEY] = state.recording.clawId;
+				resolved[THREAD_ID_CONTEXT_KEY] = state.recording.threadId;
+				if (state.recording.runId !== undefined) {
+					resolved[RUN_ID_CONTEXT_KEY] = state.recording.runId;
+				}
+			}
+			return resolved;
+		};
 		const core = createGovernance({
 			redactor: config.redactor,
 			audit: config.audit,
@@ -353,7 +394,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 				if (state.recording !== undefined) metadata.recording = state.recording;
 				return metadata as JsonObject;
 			},
-			resolveContext,
+			resolveContext: resolveGovernanceContext,
 			plugins: config.plugins,
 			callModel: async () => {
 				if (!state.currentModelRunner) {
@@ -381,8 +422,8 @@ export function createRuntime<const Config extends RuntimeConfig>(
 					tool as { euroclaw?: { effect?: ToolEffectPolicy } }
 				).euroclaw?.effect;
 				const outputMode = effectOutputMode(effectPolicy);
-				if (!effectStore || !state.currentEffectId)
-					return execute(state.abortSignal);
+				if (!effectStore) return execute(state.abortSignal);
+				state.currentEffectId ??= `run:${state.recording?.runId ?? state.currentApprovalWaitId ?? newId("run")}:tool:${state.currentToolCallId || call.name}`;
 				const inputHash = hashEffectInput({
 					toolName: call.name,
 					args: call.args,
@@ -509,11 +550,14 @@ export function createRuntime<const Config extends RuntimeConfig>(
 		const state = createRunState();
 		state.abortSignal = options?.abortSignal;
 		abortIfNeeded(options?.abortSignal);
-		const recording = runtimeRecordingContextFrom(ctx);
+		const recording = options?.[RUNTIME_RECORDING_OPTION];
 		state.recording = recording;
 		const core = createRunCore(state);
 		const resolvedCtx = await resolveRunContext(ctx);
-		await emitEvent(recording, { prompt, type: "run.started" });
+		await emitEvent(recording, {
+			prompt: String(await redactEventValue(prompt, resolvedCtx)),
+			type: "run.started",
+		});
 		const result = await runAiSdkLoop({
 			model: config.model,
 			tools: modelTools,
@@ -527,13 +571,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 			now,
 			abortSignal: options?.abortSignal,
 			emitEvent: (payload) => emitEvent(recording, payload),
-			redactEventValue: async (value) =>
-				config.redactor
-					? config.redactor.redactValue(
-							value,
-							redactionContextFrom(resolvedCtx),
-						)
-					: value,
+			redactEventValue: (value) => redactEventValue(value, resolvedCtx),
 		});
 		const valid = RuntimeResult(result);
 		if (valid instanceof ark.errors) {
@@ -562,7 +600,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 		options?: RuntimeRunOptions,
 	): Promise<RuntimeResult | null> => {
 		abortIfNeeded(options?.abortSignal);
-		const recording = runtimeRecordingContextFrom(ctx);
+		const recording = options?.[RUNTIME_RECORDING_OPTION];
 		if (!approvalStore) return null;
 		const record = await approvalStore.get(id);
 		if (!record) return null;
@@ -616,7 +654,8 @@ export function createRuntime<const Config extends RuntimeConfig>(
 		state.currentToolCallId = checkpoint.toolCallId;
 		state.currentToolName = checkpoint.toolName;
 		state.currentToolInput = checkpoint.toolInput;
-		state.currentMessages = checkpoint.messages as ModelMessage[];
+		const checkpointMessages = checkpoint.messages;
+		state.currentMessages = checkpointMessages;
 		state.currentStep = checkpoint.step;
 		state.currentApprovalWaitId = checkpoint.waitId;
 		state.currentEffectId = `approval:${id}:tool:${checkpoint.toolCallId}`;
@@ -655,6 +694,9 @@ export function createRuntime<const Config extends RuntimeConfig>(
 					)
 				: toolResult.output;
 			await emitEvent(effectiveRecording, {
+				...(state.currentEffectId !== undefined
+					? { effectId: state.currentEffectId }
+					: {}),
 				...(redactedOutput !== undefined ? { output: redactedOutput } : {}),
 				step: checkpoint.step,
 				toolCallId: checkpoint.toolCallId,
@@ -672,7 +714,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 			});
 		}
 		const messages = [
-			...(checkpoint.messages as ModelMessage[]),
+			...checkpointMessages,
 			toolResultMessage(checkpoint.toolCallId, checkpoint.toolName, output),
 		];
 

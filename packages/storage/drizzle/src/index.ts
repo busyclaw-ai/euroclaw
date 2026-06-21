@@ -179,17 +179,6 @@ function parseConfig(
 	return { provider: "sqlite", schema: config };
 }
 
-function whereAfterUpdate(
-	where: Where[],
-	update: Record<string, unknown>,
-): Where[] {
-	return where.map((clause) =>
-		Object.hasOwn(update, clause.field)
-			? { ...clause, value: update[clause.field] as Where["value"] }
-			: clause,
-	);
-}
-
 /** Adapt a Drizzle database + schema map to the storage Adapter port. */
 export function drizzleAdapter(
 	db: unknown,
@@ -273,13 +262,21 @@ export function drizzleAdapter(
 
 		async update({ model, where, update }) {
 			const t = table(model);
-			const builder = database
-				.update(t)
-				.set(update)
-				.where(whereClause(t, where));
+			const before = await adapter.findOne<{ id?: string | number }>({
+				model,
+				where,
+			});
+			const id = before?.id;
+			if (id === undefined || id === null) return null;
+			const idCol = idColumn(t);
+			const clause = and(
+				whereClause(t, where),
+				eq(idCol as Parameters<typeof eq>[0], id),
+			);
+			const builder = database.update(t).set(update).where(clause);
 			if (provider === "mysql") {
 				await run(builder, provider);
-				return this.findOne({ model, where: whereAfterUpdate(where, update) });
+				return adapter.findOne({ model, where: [{ field: "id", value: id }] });
 			}
 			const row = await one(builder.returning(), provider);
 			return (row ?? null) as never;
@@ -298,7 +295,24 @@ export function drizzleAdapter(
 
 		async delete({ model, where }) {
 			const t = table(model);
-			await run(database.delete(t).where(whereClause(t, where)), provider);
+			const before = await adapter.findOne<{ id?: string | number }>({
+				model,
+				where,
+			});
+			const id = before?.id;
+			if (id === undefined || id === null) return;
+			const idCol = idColumn(t);
+			await run(
+				database
+					.delete(t)
+					.where(
+						and(
+							whereClause(t, where),
+							eq(idCol as Parameters<typeof eq>[0], id),
+						),
+					),
+				provider,
+			);
 		},
 
 		async deleteMany({ model, where }) {

@@ -23,8 +23,15 @@ function escapeRegExp(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function assertFieldName(field: string): void {
+	if (field.startsWith("$") || field.includes(".") || field.includes("\0")) {
+		throw new Error(`storage-mongodb: invalid field name "${field}"`);
+	}
+}
+
 /** One Where clause → a Mongo filter fragment. */
 function clause(w: Where): Filter<Document> {
+	assertFieldName(w.field);
 	const op = w.operator ?? "eq";
 	if (op === "eq") return { [w.field]: w.value };
 	if (op === "contains")
@@ -69,10 +76,12 @@ export function mongoAdapter(db: Db): Adapter {
 
 		async findMany({ model, where, limit, offset, sortBy }) {
 			let cursor = col(model).find(toFilter(where ?? []));
-			if (sortBy)
+			if (sortBy) {
+				assertFieldName(sortBy.field);
 				cursor = cursor.sort({
 					[sortBy.field]: sortBy.direction === "desc" ? -1 : 1,
 				});
+			}
 			if (offset) cursor = cursor.skip(offset);
 			if (limit !== undefined) cursor = cursor.limit(limit);
 			return (await cursor.toArray()).map((d) => strip(d)) as never;

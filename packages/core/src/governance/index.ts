@@ -35,15 +35,18 @@ export type {
 } from "./boundary";
 export {
 	ACTOR_CONTEXT_KEY,
+	CLAW_ID_CONTEXT_KEY,
 	gateDecision,
 	handleResult,
 	MEMORY_NAMESPACE_CONTEXT_KEY,
 	modelCall,
 	modelMessage,
 	ROLE_CONTEXT_KEY,
+	RUN_ID_CONTEXT_KEY,
 	SUBJECT_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
 	TENANT_CONTEXT_KEY,
+	THREAD_ID_CONTEXT_KEY,
 	toolCall,
 } from "./boundary";
 export type { Context, Governance, GovernanceConfig } from "./governance";

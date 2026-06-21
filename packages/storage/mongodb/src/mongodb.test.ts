@@ -37,6 +37,15 @@ describe("@euroclaw/storage-mongodb — Where → Mongo filter", () => {
 		});
 		expect(toFilter([])).toEqual({});
 	});
+
+	it("rejects Mongo operator field names", () => {
+		expect(() => toFilter([{ field: "$where", value: "true" }])).toThrow(
+			/invalid field name/,
+		);
+		expect(() => toFilter([{ field: "profile.$expr", value: "x" }])).toThrow(
+			/invalid field name/,
+		);
+	});
 });
 
 // Real behavioral coverage against an in-memory MongoDB (mongod binary, cached after first run).
