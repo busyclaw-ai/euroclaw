@@ -26,7 +26,6 @@
 		"packages/policy/*",
 		"packages/storage/*",
 		"packages/plugins/*",
-		"packages/engines/*",
-		"apps/*"
+		"packages/engines/*"
 	]
 }

@@ -4,7 +4,6 @@ packages:
   - "packages/storage/*"
   - "packages/plugins/*"
   - "packages/engines/*"
-  - "apps/*"
 
 # better-sqlite3 needs its native build to run (only this one is allowlisted) — used by the
 # SQL storage adapters' tests via an in-memory database.
