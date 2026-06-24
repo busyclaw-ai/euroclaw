@@ -14,8 +14,25 @@ export {
 	approvalStatus,
 	newApproval,
 } from "./approval";
-export type { AuditEntry, AuditInput, AuditSink } from "./audit";
-export { auditEntry, auditGate, auditInput, createMemoryAudit } from "./audit";
+export type {
+	AnchorProof,
+	AuditChainProblem,
+	AuditChainVerification,
+	AuditEntry,
+	AuditHead,
+	AuditInput,
+	AuditSink,
+} from "./audit";
+export {
+	anchorProof,
+	auditEntry,
+	auditGate,
+	auditHead,
+	auditInput,
+	createMemoryAudit,
+	headOf,
+	verifyAuditChain,
+} from "./audit";
 export type {
 	AfterGate,
 	BoundaryCall,

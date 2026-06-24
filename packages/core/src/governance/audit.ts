@@ -105,6 +105,174 @@ export function createMemoryAudit(): AuditSink {
 	};
 }
 
+// ── Chain verification ─────────────────────────────────────────────────────
+
+/**
+ * A snapshot of a log's tip: the seq/hash an external witness pins. This is the ~tiny thing you
+ * publish (RFC-3161, Rekor, a replica) — not the whole log. Validated on the way back in (an
+ * anchor row is read from durable storage at verify time). See docs/architecture/14.
+ */
+export const auditHead = type({
+	seq: "number",
+	hash: "string",
+	ts: "string",
+	count: "number",
+});
+export type AuditHead = typeof auditHead.infer;
+
+/**
+ * A receipt that a head was published to an external witness. `kind`/`proof` are the witness's;
+ * core treats `proof` as opaque — cryptographically validating it against the witness is the
+ * anchor adapter's job (`@euroclaw/anchor-rfc3161` etc.), not core's. Validated as untrusted input
+ * (it is read back from the `audit_anchor` store at verify time).
+ */
+export const anchorProof = type({
+	head: auditHead,
+	kind: "'rfc3161' | 'rekor' | 'replica' | 'kms'",
+	proof: "string",
+	signedAt: "string",
+});
+export type AnchorProof = typeof anchorProof.infer;
+
+/** The current tip of a log — what you hand an anchor to pin. `null` for an empty log. */
+export function headOf(entries: readonly AuditEntry[]): AuditHead | null {
+	const last = entries.at(-1);
+	if (!last) return null;
+	return { seq: last.seq, hash: last.hash, ts: last.ts, count: entries.length };
+}
+
+/** One integrity problem found while walking the chain. */
+export type AuditChainProblem =
+	| {
+			kind: "broken_link";
+			seq: number;
+			expectedPrevHash: string;
+			actualPrevHash: string;
+	  }
+	| {
+			kind: "hash_mismatch";
+			seq: number;
+			expected: string;
+			actual: string;
+	  }
+	| {
+			kind: "seq_gap";
+			seq: number;
+			expected: number;
+			actual: number;
+	  }
+	// The chain diverges from what was externally published — catches a full-store rewrite.
+	| {
+			kind: "anchor_mismatch";
+			seq: number;
+			expected: string;
+			actual: string;
+	  }
+	// An anchored seq is gone from the log — catches tail truncation below an anchor.
+	| {
+			kind: "anchor_missing";
+			seq: number;
+			anchoredHash: string;
+	  }
+	// An anchor row failed validation — a malformed/corrupt anchor is a problem, not a silent pass.
+	| {
+			kind: "anchor_invalid";
+			reason: string;
+	  };
+
+/** The result of walking an audit log: an intact chain, or every problem found. */
+export type AuditChainVerification =
+	| { ok: true; entries: number }
+	| { ok: false; entries: number; problems: readonly AuditChainProblem[] };
+
+/**
+ * Walk an audit log and verify its hash chain. For each record it checks the LINK (the record's
+ * `prevHash` must equal the previous record's `hash` — GENESIS for the first), recomputes the
+ * record's SHA-256 from its content and confirms it matches the stored `hash`, and flags any
+ * sequence gap. It collects EVERY problem rather than stopping at the first, so an audit can see
+ * the full extent of the damage.
+ *
+ * Without `anchors` this makes the chain's tamper-EVIDENCE operational, but it is not tamper-PROOF:
+ * it catches partial tampering (a record edited, deleted, reordered, or inserted — including an
+ * attacker who fixes a record's own hash, which snaps the following link) but CANNOT catch a
+ * full-store rewrite (the whole log re-chained consistently) or tail truncation.
+ *
+ * Pass `anchors` — heads previously published to an external witness — to close that gap. Each
+ * anchored head must still appear verbatim at its seq: a rewrite makes the chain diverge from
+ * published history (`anchor_mismatch`), and truncating below an anchor drops the anchored seq
+ * (`anchor_missing`). Core checks structural agreement only; an anchor adapter separately validates
+ * each `proof` against its witness. See docs/architecture/14-audit-tamper-evidence.md.
+ */
+export function verifyAuditChain(
+	entries: readonly AuditEntry[],
+	anchors: readonly AnchorProof[] = [],
+): AuditChainVerification {
+	const problems: AuditChainProblem[] = [];
+	const hashBySeq = new Map<number, string>();
+	let expectedPrevHash = GENESIS;
+	let index = 0;
+	for (const entry of entries) {
+		if (entry.prevHash !== expectedPrevHash) {
+			problems.push({
+				kind: "broken_link",
+				seq: entry.seq,
+				expectedPrevHash,
+				actualPrevHash: entry.prevHash,
+			});
+		}
+		// Recompute over the record minus its `hash` field — the same snapshot shape + key
+		// order the writer used, so any edit after the fact changes the recomputed hash.
+		const { hash, ...snapshot } = entry;
+		const recomputed = hashEntry(JSON.stringify(snapshot));
+		if (recomputed !== hash) {
+			problems.push({
+				kind: "hash_mismatch",
+				seq: entry.seq,
+				expected: recomputed,
+				actual: hash,
+			});
+		}
+		if (entry.seq !== index) {
+			problems.push({
+				kind: "seq_gap",
+				seq: entry.seq,
+				expected: index,
+				actual: entry.seq,
+			});
+		}
+		hashBySeq.set(entry.seq, hash);
+		// The next record committed to THIS record's stored hash (not the recomputed one), so
+		// "tamper content + fix own hash" still snaps the following link.
+		expectedPrevHash = hash;
+		index++;
+	}
+	// Anchors pin seq→hash in un-retractable external history. The local chain must still agree.
+	// They are read back from durable storage, so validate the shape before trusting it — a
+	// corrupt anchor row must surface as a problem, never pass silently.
+	for (const anchor of anchors) {
+		const valid = anchorProof(anchor);
+		if (valid instanceof type.errors) {
+			problems.push({ kind: "anchor_invalid", reason: valid.summary });
+			continue;
+		}
+		const { seq, hash } = valid.head;
+		const present = hashBySeq.get(seq);
+		if (present === undefined) {
+			problems.push({ kind: "anchor_missing", seq, anchoredHash: hash });
+		} else if (present !== hash) {
+			problems.push({
+				kind: "anchor_mismatch",
+				seq,
+				expected: hash,
+				actual: present,
+			});
+		}
+	}
+	return problems.length === 0
+		? { ok: true, entries: entries.length }
+		: { ok: false, entries: entries.length, problems };
+}
+
 function auditPayload(call: BoundaryCall): JsonObject {
 	return call.payload;
 }
