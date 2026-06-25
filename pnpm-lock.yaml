@@ -21,48 +21,48 @@ importers:
         specifier: 4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.3)(msw@2.14.6(@types/node@25.9.3)(typescript@6.0.3))(vite@8.0.16(@types/node@25.9.3)(jiti@2.7.0))
 
-  packages/adapter-core:
+  packages/adapter/core:
     dependencies:
       '@euroclaw/core':
         specifier: workspace:*
-        version: link:../core
+        version: link:../../core
       '@euroclaw/errors':
         specifier: workspace:*
-        version: link:../errors
+        version: link:../../errors
       arktype:
         specifier: 2.2.0
         version: 2.2.0
       euroclaw:
         specifier: workspace:*
-        version: link:../euroclaw
+        version: link:../../euroclaw
 
-  packages/adapter-next:
+  packages/adapter/nextjs:
     dependencies:
       '@euroclaw/adapter-core':
         specifier: workspace:*
-        version: link:../adapter-core
+        version: link:../core
       euroclaw:
         specifier: workspace:*
-        version: link:../euroclaw
+        version: link:../../euroclaw
 
-  packages/channel-telegram:
+  packages/channel/telegram:
     dependencies:
       '@euroclaw/core':
         specifier: workspace:*
-        version: link:../core
+        version: link:../../core
       arktype:
         specifier: 2.2.0
         version: 2.2.0
       euroclaw:
         specifier: workspace:*
-        version: link:../euroclaw
+        version: link:../../euroclaw
     devDependencies:
       '@euroclaw/storage-core':
         specifier: workspace:*
-        version: link:../storage/core
+        version: link:../../storage/core
       '@euroclaw/storage-durable':
         specifier: workspace:*
-        version: link:../storage/durable
+        version: link:../../storage/durable
 
   packages/core:
     dependencies:

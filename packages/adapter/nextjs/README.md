@@ -1,9 +1,9 @@
-# @euroclaw/adapter-next
+# @euroclaw/adapter-nextjs
 
 Thin Next.js route-handler adapter for euroclaw, inspired by Better Auth's `toNextJsHandler` shape.
 
 ```ts
-import { toNextJsHandler } from "@euroclaw/adapter-next"
+import { toNextJsHandler } from "@euroclaw/adapter-nextjs"
 import { claw } from "@/lib/euroclaw"
 
 export const { GET, POST, PATCH, PUT, DELETE } = toNextJsHandler(claw)

@@ -2,7 +2,7 @@ import type { Claw } from "euroclaw";
 import { describe, expect, it } from "vitest";
 import { toNextJsHandler } from "./index";
 
-describe("@euroclaw/adapter-next", () => {
+describe("@euroclaw/adapter-nextjs", () => {
 	it("returns Next.js route handlers around the core request handler", async () => {
 		const claw = {
 			api: {

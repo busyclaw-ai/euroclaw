@@ -1,5 +1,5 @@
 {
-	"name": "@euroclaw/adapter-next",
+	"name": "@euroclaw/adapter-nextjs",
 	"version": "0.0.0",
 	"type": "module",
 	"description": "Next.js route-handler adapter for euroclaw.",

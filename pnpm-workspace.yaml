@@ -1,5 +1,7 @@
 packages:
   - "packages/*"
+  - "packages/adapter/*"
+  - "packages/channel/*"
   - "packages/policy/*"
   - "packages/storage/*"
   - "packages/plugins/*"
