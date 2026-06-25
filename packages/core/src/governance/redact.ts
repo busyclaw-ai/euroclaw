@@ -147,7 +147,7 @@ export function createMemoryPiiMappingStore(): PiiMappingStore {
 	return {
 		durable: false,
 		save(mapping) {
-			const valid = piiMapping(mapping) as PiiMapping | type.errors;
+			const valid = piiMapping(mapping);
 			if (valid instanceof type.errors) {
 				throw validationError("invalid PII mapping", valid.summary);
 			}

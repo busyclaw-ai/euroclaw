@@ -10,10 +10,21 @@ import {
 	EuroclawError,
 	errorMessage,
 } from "@euroclaw/errors";
+import { type } from "arktype";
 import type { Claw, ClawApi, ClawApiHttpMethod, ClawApiMethod } from "euroclaw";
 import { clawApiRouteList, parseClawApiInput } from "euroclaw";
 
 export type ClawHttpMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
+
+// The HTTP wire contract every euroclaw adapter response carries: a success/error envelope around
+// the claw api result. One schema — the server builds it (errorResponse + the route handler bodies)
+// and the client PARSES it (readClientResponse) rather than casting untrusted network JSON.
+export const clawResponseEnvelope = type({
+	"ok?": "boolean",
+	"data?": "unknown",
+	"error?": { message: "string" },
+});
+export type ClawResponseEnvelope = typeof clawResponseEnvelope.infer;
 
 export type ClawRequestHandlerOptions = {
 	basePath?: string;
@@ -151,7 +162,7 @@ function apiRoutes(): ResolvedRoute[] {
 				if (typeof fn !== "function") {
 					return {
 						status: 404,
-						body: { ok: false, error: `unknown api method: ${name}` },
+						body: { ok: false, error: { message: `unknown api method: ${name}` } },
 					};
 				}
 				const input = parseClawApiInput(name, await readInput(request, method));
@@ -218,7 +229,7 @@ function baseRoutes(
 							) {
 								return {
 									status: 401,
-									body: { error: "unauthorized", ok: false },
+									body: { error: { message: "unauthorized" }, ok: false },
 								};
 							}
 							const tasks = cronTasksFrom(pluginsFrom(claw, options));
@@ -277,12 +288,21 @@ async function jsonHeaders(
 	return next;
 }
 
+function parseEnvelope(text: string): ClawResponseEnvelope | undefined {
+	if (!text) return undefined;
+	let body: unknown;
+	try {
+		body = JSON.parse(text);
+	} catch {
+		// Not JSON (a proxy/gateway error page, say) — let the HTTP status drive the error message.
+		return undefined;
+	}
+	const valid = clawResponseEnvelope(body);
+	return valid instanceof type.errors ? undefined : valid;
+}
+
 async function readClientResponse(response: Response): Promise<unknown> {
-	const text = await response.text();
-	const body = text ? (JSON.parse(text) as unknown) : undefined;
-	const envelope = body as
-		| { data?: unknown; error?: { message?: string }; ok?: boolean }
-		| undefined;
+	const envelope = parseEnvelope(await response.text());
 	if (!response.ok || envelope?.ok === false) {
 		throw new Error(
 			envelope?.error?.message ??

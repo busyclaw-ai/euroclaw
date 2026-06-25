@@ -1,4 +1,4 @@
-import { type as ark } from "arktype";
+import { type as ark, type Type } from "arktype";
 import type { JsonObject, JsonValue } from "./common";
 import {
 	jsonObject as jsonObjectSchema,
@@ -314,7 +314,12 @@ export function entity<const Fields extends Record<string, EntityField>>(
 	name: string,
 	fields: Fields,
 ) {
-	const record = ark(shapeFor(fields));
+	// `shapeFor` assembles the validator from each field's `ark` expression, but it returns
+	// `Record<string, unknown>`, so arktype can't recover the precise shape and `.infer` would be
+	// lossy. Re-annotate the (runtime-correct) validator to the field-derived record type, so every
+	// caller gets a precise `EntityRecord<Fields> | ArkErrors` from `record(x)` — no cast at the parse
+	// site. This single assertion is the one place that bridge lives.
+	const record = ark(shapeFor(fields)) as unknown as Type<EntityRecord<Fields>>;
 	const storage = {
 		[name]: {
 			fields: Object.fromEntries(

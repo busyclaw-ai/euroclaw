@@ -68,7 +68,7 @@ function assertCreateClawInput(input: unknown): CreateClawInput {
 }
 
 function assertClawRecord(input: unknown): ClawRecord {
-	const valid = clawRecord(input) as ClawRecord | type.errors;
+	const valid = clawRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("claw record invalid", valid.summary);
 	}
@@ -84,7 +84,7 @@ function assertCreateThreadInput(input: unknown): CreateThreadInput {
 }
 
 function assertThreadRecord(input: unknown): ThreadRecord {
-	const valid = threadRecord(input) as ThreadRecord | type.errors;
+	const valid = threadRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("thread record invalid", valid.summary);
 	}
@@ -100,7 +100,7 @@ function assertAppendMessageInput(input: unknown): AppendMessageInput {
 }
 
 function assertMessageRecord(input: unknown): MessageRecord {
-	const valid = messageRecord(input) as MessageRecord | type.errors;
+	const valid = messageRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("message record invalid", valid.summary);
 	}
@@ -116,7 +116,7 @@ function assertCreateToolCallInput(input: unknown): CreateToolCallInput {
 }
 
 function assertToolCallRecord(input: unknown): ToolCallRecord {
-	const valid = toolCallRecord(input) as ToolCallRecord | type.errors;
+	const valid = toolCallRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("tool call record invalid", valid.summary);
 	}
@@ -134,7 +134,7 @@ function assertCreateToolResultInput(input: unknown): CreateToolResultInput {
 }
 
 function assertToolResultRecord(input: unknown): ToolResultRecord {
-	const valid = toolResultRecord(input) as ToolResultRecord | type.errors;
+	const valid = toolResultRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("tool result record invalid", valid.summary);
 	}
@@ -152,7 +152,7 @@ function assertCreateCheckpointInput(input: unknown): CreateCheckpointInput {
 }
 
 function assertCheckpointRecord(input: unknown): CheckpointRecord {
-	const valid = checkpointRecord(input) as CheckpointRecord | type.errors;
+	const valid = checkpointRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("checkpoint record invalid", valid.summary);
 	}

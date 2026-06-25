@@ -13,7 +13,7 @@ export type PiiMappingStoreOptions = {
 };
 
 function validateMapping(value: unknown): PiiMapping {
-	const valid = piiMappingSchema(value) as PiiMapping | type.errors;
+	const valid = piiMappingSchema(value);
 	if (valid instanceof type.errors) {
 		throw validationError("PII mapping invalid", valid.summary);
 	}

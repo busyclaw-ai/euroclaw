@@ -28,6 +28,10 @@ const teamInviteEntity = entity("team_invite", {
 	createdAt: field.string({ required: true }),
 } as const);
 
+/** The team row validators — the single source createTeamStore parses every read through. */
+export const teamMemberRecord = teamMemberEntity.record;
+export const teamInviteRecord = teamInviteEntity.record;
+
 /** The tables backing the native team store (createTeamStore): members + pending invites. */
 export const teamSchema = {
 	...teamMemberEntity.storage,

@@ -3,23 +3,33 @@
 // atomic consumeOne primitive) and creates a member. `roleOf` is what a claw's
 // `roleMembership({ roleOf })` calls to resolve the actor's role on a team → which authz then reads.
 
+import { validationError } from "@euroclaw/errors";
 import type { Adapter, Where } from "@euroclaw/storage-core";
 import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
+import { type } from "arktype";
+import { teamInviteRecord, teamMemberRecord } from "./schema";
 
-export type TeamMember = {
-	id: string;
-	team: string;
-	userId: string;
-	role: string;
-	joinedAt: string;
-};
-export type TeamInvite = {
-	id: string;
-	team: string;
-	email: string;
-	role: string;
-	createdAt: string;
-};
+// The row shapes ARE the team entities' own arktype records — one source of truth shared with the
+// schema/migration declarations. Reads are untrusted boundary data (rows from any adapter back this
+// store) and feed authz role resolution, so every read is PARSED through these, never cast.
+export type TeamMember = typeof teamMemberRecord.infer;
+export type TeamInvite = typeof teamInviteRecord.infer;
+
+function fromMemberRow(row: Record<string, unknown>): TeamMember {
+	const valid = teamMemberRecord(row);
+	if (valid instanceof type.errors) {
+		throw validationError("team member row invalid", valid.summary);
+	}
+	return valid;
+}
+
+function fromInviteRow(row: Record<string, unknown>): TeamInvite {
+	const valid = teamInviteRecord(row);
+	if (valid instanceof type.errors) {
+		throw validationError("team invite row invalid", valid.summary);
+	}
+	return valid;
+}
 
 export type TeamStore = {
 	/** Open a pending invite to a team, with a role. */
@@ -67,11 +77,12 @@ export function createTeamStore(
 
 		async accept(inviteId, userId) {
 			// Single-use: atomically consume the invite, then create the membership.
-			const invite = await adapter.consumeOne<TeamInvite>({
+			const inviteRow = await adapter.consumeOne<Record<string, unknown>>({
 				model: "team_invite",
 				where: [{ field: "id", value: inviteId }],
 			});
-			if (!invite) return null;
+			if (!inviteRow) return null;
+			const invite = fromInviteRow(inviteRow);
 			const member: TeamMember = {
 				id: newId(),
 				team: invite.team,
@@ -84,18 +95,19 @@ export function createTeamStore(
 		},
 
 		async members(team) {
-			return adapter.findMany<TeamMember>({
+			const rows = await adapter.findMany<Record<string, unknown>>({
 				model: "team_member",
 				where: [{ field: "team", value: team }],
 			});
+			return rows.map(fromMemberRow);
 		},
 
 		async roleOf(team, userId) {
-			const member = await adapter.findOne<TeamMember>({
+			const row = await adapter.findOne<Record<string, unknown>>({
 				model: "team_member",
 				where: memberWhere(team, userId),
 			});
-			return member?.role ?? null;
+			return row ? fromMemberRow(row).role : null;
 		},
 
 		async remove(team, userId) {

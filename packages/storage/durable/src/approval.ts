@@ -75,7 +75,7 @@ function parseMetadata(
 }
 
 function validateRecord(record: unknown): ApprovalRecord {
-	const valid = approvalRecordSchema(record) as ApprovalRecord | type.errors;
+	const valid = approvalRecordSchema(record);
 	if (valid instanceof type.errors) {
 		throw validationError("approval record invalid", valid.summary);
 	}

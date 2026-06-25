@@ -25,6 +25,7 @@
 	"dependencies": {
 		"@euroclaw/core": "workspace:*",
 		"@euroclaw/errors": "workspace:*",
+		"arktype": "2.2.0",
 		"euroclaw": "workspace:*"
 	}
 }

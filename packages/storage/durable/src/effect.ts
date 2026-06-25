@@ -68,7 +68,7 @@ function stringifyJson(value: unknown, label: string): string | undefined {
 }
 
 function validateRecord(value: unknown): EffectRecord {
-	const valid = effectRecordSchema(value) as EffectRecord | type.errors;
+	const valid = effectRecordSchema(value);
 	if (valid instanceof type.errors) {
 		throw validationError("effect record invalid", valid.summary);
 	}

@@ -198,4 +198,43 @@ describe("@euroclaw/adapter-core", () => {
 			/claw\.api\.createClaw input/,
 		);
 	});
+
+	it("emits a uniform { error: { message } } envelope for auth failures", async () => {
+		const claw = {
+			api: {},
+			$context: { cronHandler: { secret: "secret" } },
+		} as unknown as Claw;
+		const handler = toRequestHandler(claw);
+
+		const unauthorized = await handler(
+			new Request("https://app.test/api/euroclaw/cron", { method: "POST" }),
+		);
+
+		expect(unauthorized.status).toBe(401);
+		// Previously this path emitted `error: "unauthorized"` (a bare string), which the client's
+		// `error.message` read silently dropped. The envelope is now uniform across all errors.
+		await expect(unauthorized.json()).resolves.toEqual({
+			error: { message: "unauthorized" },
+			ok: false,
+		});
+	});
+
+	it("surfaces the server error message to the client via the parsed envelope", async () => {
+		const claw = {
+			api: {
+				getClaw: async () => {
+					throw new Error("boom from server");
+				},
+			},
+		} as unknown as Claw;
+		const handler = toRequestHandler(claw);
+		const client = createClawClient({
+			baseUrl: "https://app.test/api/euroclaw",
+			fetch: (input, init) => handler(new Request(input, init)),
+		});
+
+		await expect(client.getClaw({ id: "claw-1" })).rejects.toThrow(
+			/boom from server/,
+		);
+	});
 });

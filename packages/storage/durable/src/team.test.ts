@@ -60,6 +60,28 @@ function suite(
 			expect(await store.roleOf("acme", "stranger")).toBeNull();
 			expect(await store.roleOf("other", "bob")).toBeNull();
 		});
+
+		it("rejects a corrupt member row instead of trusting it for authz", async () => {
+			const adapter = makeAdapter();
+			const store = createTeamStore(adapter);
+			// Plant a row missing the required `role` — exactly what the old blind cast would have
+			// handed straight to roleOf/authz. Validation must reject it on read.
+			await adapter.create({
+				model: "team_member",
+				data: {
+					id: "m1",
+					team: "acme",
+					userId: "bob",
+					joinedAt: "2026-01-01T00:00:00.000Z",
+				},
+			});
+			await expect(store.roleOf("acme", "bob")).rejects.toThrow(
+				/team member row invalid/,
+			);
+			await expect(store.members("acme")).rejects.toThrow(
+				/team member row invalid/,
+			);
+		});
 	});
 }
 

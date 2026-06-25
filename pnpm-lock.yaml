@@ -29,6 +29,9 @@ importers:
       '@euroclaw/errors':
         specifier: workspace:*
         version: link:../errors
+      arktype:
+        specifier: 2.2.0
+        version: 2.2.0
       euroclaw:
         specifier: workspace:*
         version: link:../euroclaw
