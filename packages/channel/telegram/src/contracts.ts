@@ -1,4 +1,4 @@
-import type { EuroclawPlugin } from "@euroclaw/core";
+import type { EuroclawPlugin } from "@euroclaw/contracts";
 import type {
 	BindConversationClawInput,
 	BindConversationThreadInput,

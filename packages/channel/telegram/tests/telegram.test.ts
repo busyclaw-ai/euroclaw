@@ -1,8 +1,5 @@
-import {
-	createStoredRedactor,
-	type Detector,
-	type EuroclawRouteRequest,
-} from "@euroclaw/core";
+import type { Detector, EuroclawRouteRequest } from "@euroclaw/contracts";
+import { createStoredRedactor } from "@euroclaw/core";
 import { memoryAdapter } from "@euroclaw/storage-core";
 import { createPiiMappingStore } from "@euroclaw/storage-durable";
 import { createClaw, type RuntimeConfig } from "euroclaw";
@@ -13,7 +10,7 @@ import {
 	type TelegramSendMessageInput,
 	type TelegramUpdate,
 	telegramChannel,
-} from "./index";
+} from "../src/index";
 
 function textModel(text: string): RuntimeConfig["model"] {
 	return {

@@ -10,7 +10,8 @@
 		"build": "turbo run build",
 		"typecheck": "turbo run typecheck",
 		"test": "turbo run test",
-		"lint": "biome check .",
+		"lint": "biome check . && pnpm check:test-layout",
+		"check:test-layout": "f=$(find packages -path '*/node_modules' -prune -o -path '*/src/*' \\( -name '*.test.ts' -o -name '*.test-d.ts' \\) -print); if [ -n \"$f\" ]; then echo 'ERROR: tests must live in <pkg>/tests/, not src/:'; echo \"$f\"; exit 1; fi",
 		"format": "biome format --write .",
 		"dev": "turbo run dev"
 	},

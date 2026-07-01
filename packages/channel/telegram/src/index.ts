@@ -5,7 +5,7 @@ import {
 	errorMessage,
 	stateError,
 	validationError,
-} from "@euroclaw/core";
+} from "@euroclaw/contracts";
 import { type as ark } from "arktype";
 import type { Claw } from "euroclaw";
 import type {
