@@ -85,10 +85,85 @@ function routeKey(route: Pick<ResolvedRoute, "method" | "path">): string {
 	return `${route.method} ${normalizePath(route.path)}`;
 }
 
+// A path segment beginning with ':' is a named parameter (e.g. /channels/:provider/:endpointKey).
+// Static routes match via the O(1) map; only on a static miss are patterns tried — so a literal path
+// always wins over a pattern.
+function isPattern(path: string): boolean {
+	return normalizePath(path)
+		.split("/")
+		.some((segment) => segment.startsWith(":"));
+}
+
+type CompiledPattern = {
+	method: string;
+	segments: readonly string[];
+	route: ResolvedRoute;
+};
+
+function compilePattern(route: ResolvedRoute): CompiledPattern {
+	return {
+		method: route.method,
+		segments: normalizePath(route.path).split("/"),
+		route,
+	};
+}
+
+function decodeParam(value: string): string {
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return value;
+	}
+}
+
+function matchPattern(
+	pattern: CompiledPattern,
+	method: string,
+	path: string,
+): Record<string, string> | null {
+	if (pattern.method !== method) return null;
+	const segments = path.split("/");
+	if (segments.length !== pattern.segments.length) return null;
+	const params: Record<string, string> = {};
+	for (let i = 0; i < pattern.segments.length; i++) {
+		const patternSegment = pattern.segments[i];
+		const pathSegment = segments[i];
+		if (patternSegment === undefined || pathSegment === undefined) return null;
+		if (patternSegment.startsWith(":")) {
+			params[patternSegment.slice(1)] = decodeParam(pathSegment);
+		} else if (patternSegment !== pathSegment) {
+			return null;
+		}
+	}
+	return params;
+}
+
+function matchPatternRoutes(
+	patterns: readonly CompiledPattern[],
+	method: string,
+	path: string,
+): { route: ResolvedRoute; params: Record<string, string> } | null {
+	for (const pattern of patterns) {
+		const params = matchPattern(pattern, method, path);
+		if (params) return { route: pattern.route, params };
+	}
+	return null;
+}
+
+// For conflict detection param names are irrelevant — /x/:a and /x/:b are the same route shape and
+// would be ambiguous at dispatch, so they must collide.
+function conflictKey(route: Pick<ResolvedRoute, "method" | "path">): string {
+	const shape = normalizePath(route.path)
+		.split("/")
+		.map((segment) => (segment.startsWith(":") ? ":" : segment))
+		.join("/");
+	return `${route.method} ${shape}`;
+}
+
 function checkRouteConflicts(routes: readonly ResolvedRoute[]): void {
 	const seen = new Map<string, string>();
 	for (const route of routes) {
-		const key = routeKey(route);
+		const key = conflictKey(route);
 		const previous = seen.get(key);
 		if (previous) {
 			throw configurationError("euroclaw route conflict", {
@@ -386,7 +461,13 @@ export function toRequestHandler(
 ): (request: Request) => Promise<Response> {
 	const routes = [...baseRoutes(claw, options), ...pluginRoutes(claw, options)];
 	checkRouteConflicts(routes);
-	const routeMap = new Map(routes.map((route) => [routeKey(route), route]));
+	const staticRoutes = routes.filter((route) => !isPattern(route.path));
+	const patternRoutes = routes
+		.filter((route) => isPattern(route.path))
+		.map(compilePattern);
+	const routeMap = new Map(
+		staticRoutes.map((route) => [routeKey(route), route]),
+	);
 	const basePath = options.basePath ?? "/api/euroclaw";
 
 	return async (request) => {
@@ -394,11 +475,19 @@ export function toRequestHandler(
 		if (!method) return errorResponse("method not allowed", 405);
 		const path = stripBasePath(new URL(request.url).pathname, basePath);
 		if (!path) return errorResponse("not found", 404);
-		const route = routeMap.get(`${method} ${normalizePath(path)}`);
-		if (!route) return errorResponse("not found", 404);
+		const normalizedPath = normalizePath(path);
+		const staticRoute = routeMap.get(`${method} ${normalizedPath}`);
+		const matched = staticRoute
+			? { route: staticRoute, params: {} as Record<string, string> }
+			: matchPatternRoutes(patternRoutes, method, normalizedPath);
+		if (!matched) return errorResponse("not found", 404);
 		try {
 			return resultToResponse(
-				await route.handler({ claw, params: {}, request }),
+				await matched.route.handler({
+					claw,
+					params: matched.params,
+					request,
+				}),
 			);
 		} catch (error) {
 			return errorResponse(error);

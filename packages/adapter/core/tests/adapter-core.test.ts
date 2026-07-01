@@ -80,6 +80,127 @@ describe("@euroclaw/adapter-core", () => {
 		).toThrow(/route conflict/);
 	});
 
+	it("matches a parameterized route and binds path params to ctx.params", async () => {
+		const plugin: EuroclawPlugin = {
+			id: "channels",
+			routes: [
+				{
+					method: "POST",
+					path: "/channels/:provider/:endpointKey/webhook",
+					handler: async ({ params }) => ({ body: { ok: true, params } }),
+				},
+			],
+		};
+		const claw = { api: {} } as unknown as Claw;
+		const handler = toRequestHandler(claw, { plugins: [plugin] });
+
+		const response = await handler(
+			new Request(
+				"https://app.test/api/euroclaw/channels/telegram/main/webhook",
+				{ method: "POST" },
+			),
+		);
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			ok: true,
+			params: { provider: "telegram", endpointKey: "main" },
+		});
+	});
+
+	it("prefers a static route over an overlapping pattern", async () => {
+		const plugin: EuroclawPlugin = {
+			id: "channels",
+			routes: [
+				{
+					method: "POST",
+					path: "/channels/:provider/webhook",
+					handler: async () => ({ body: { ok: true, matched: "pattern" } }),
+				},
+				{
+					method: "POST",
+					path: "/channels/telegram/webhook",
+					handler: async () => ({ body: { ok: true, matched: "static" } }),
+				},
+			],
+		};
+		const claw = { api: {} } as unknown as Claw;
+		const handler = toRequestHandler(claw, { plugins: [plugin] });
+
+		const response = await handler(
+			new Request("https://app.test/api/euroclaw/channels/telegram/webhook", {
+				method: "POST",
+			}),
+		);
+		await expect(response.json()).resolves.toEqual({
+			ok: true,
+			matched: "static",
+		});
+	});
+
+	it("rejects two patterns with the same shape as a conflict", () => {
+		const claw = { api: {} } as unknown as Claw;
+		expect(() =>
+			toRequestHandler(claw, {
+				plugins: [
+					{
+						id: "a",
+						routes: [
+							{
+								method: "POST",
+								path: "/channels/:a/webhook",
+								handler: async () => ({ body: { ok: true } }),
+							},
+						],
+					},
+					{
+						id: "b",
+						routes: [
+							{
+								method: "POST",
+								path: "/channels/:b/webhook",
+								handler: async () => ({ body: { ok: true } }),
+							},
+						],
+					},
+				],
+			}),
+		).toThrow(/route conflict/);
+	});
+
+	it("url-decodes param values and does not over-match on segment count", async () => {
+		const plugin: EuroclawPlugin = {
+			id: "channels",
+			routes: [
+				{
+					method: "POST",
+					path: "/channels/:provider/webhook",
+					handler: async ({ params }) => ({ body: { ok: true, params } }),
+				},
+			],
+		};
+		const claw = { api: {} } as unknown as Claw;
+		const handler = toRequestHandler(claw, { plugins: [plugin] });
+
+		const decoded = await handler(
+			new Request("https://app.test/api/euroclaw/channels/main%20bot/webhook", {
+				method: "POST",
+			}),
+		);
+		await expect(decoded.json()).resolves.toEqual({
+			ok: true,
+			params: { provider: "main bot" },
+		});
+
+		// one segment too many must NOT bind to the two-segment pattern
+		const overlong = await handler(
+			new Request(
+				"https://app.test/api/euroclaw/channels/telegram/webhook/extra",
+				{ method: "POST" },
+			),
+		);
+		expect(overlong.status).toBe(404);
+	});
+
 	it("runs plugin cron tasks through the built-in cron route", async () => {
 		const seen: Array<{ id: string; limit?: number }> = [];
 		const plugin: EuroclawPlugin = {
