@@ -1,4 +1,4 @@
-import type { EffectStore } from "@euroclaw/core";
+import type { EffectStore } from "@euroclaw/contracts";
 import { describe, expect, it } from "vitest";
 import { createClaw, govern } from "../src/index";
 import { approvalToolModel, durableRedactor, emailTool } from "./fixtures";
@@ -99,9 +99,11 @@ describe("createClaw effects", () => {
 		);
 		expect(toolRuns).toBe(1);
 
-		await expect(
-			claw.api.getEffect({ id: `approval:${approvalId}:tool:c1` }),
-		).resolves.toMatchObject({ status: "completed", output: undefined });
+		const completedEffect = await claw.api.getEffect({
+			id: `approval:${approvalId}:tool:c1`,
+		});
+		expect(completedEffect).toMatchObject({ status: "completed" });
+		expect(completedEffect?.output).toBeUndefined();
 		await expect(claw.api.continueRun({ approvalId })).rejects.toThrow(
 			/completed effect output is unavailable/,
 		);

@@ -1,8 +1,5 @@
-import {
-	createStoredRedactor,
-	type Detector,
-	type PiiSpan,
-} from "@euroclaw/core";
+import type { Detector, PiiSpan } from "@euroclaw/contracts";
+import { createStoredRedactor } from "@euroclaw/core";
 import { memoryAdapter } from "@euroclaw/storage-core";
 import { createPiiMappingStore } from "@euroclaw/storage-durable";
 import { jsonSchema, tool, type wrapLanguageModel } from "ai";

@@ -23,7 +23,7 @@ import type {
 	ToolResultRecord,
 	UpdateChannelEndpointByKeyInput,
 	UpdateClawInput,
-} from "@euroclaw/core";
+} from "@euroclaw/contracts";
 import {
 	appendMessageInput,
 	approvalStatus,
@@ -46,7 +46,7 @@ import {
 	toolCallEntity,
 	updateChannelEndpointInput,
 	validationError,
-} from "@euroclaw/core";
+} from "@euroclaw/contracts";
 import type {
 	ClawEngineHandle,
 	ClawRunReadModel,
@@ -66,6 +66,7 @@ import {
 	runtimeRunOptionsWithRecording,
 } from "@euroclaw/runtime";
 import { type as ark } from "arktype";
+import type { ClawRecordOf, CreateClawInputOf } from "./models";
 
 export type ClawSendInput<Config extends RuntimeConfig = RuntimeConfig> = {
 	clawId: string;
@@ -125,13 +126,17 @@ export type ClawApi<Config extends RuntimeConfig = RuntimeConfig> = {
 		input: UpdateChannelEndpointByKeyInput,
 	) => Promise<ChannelEndpointRecord | null>;
 
-	createClaw: (input: CreateClawInput) => Promise<ClawRecord>;
-	getClaw: (input: { id: string }) => Promise<ClawRecord | null>;
+	// Claw records are config-shaped: host `additionalFields` and plugin `schema` widen both the input
+	// and the returned record. Extra fields aren't patchable yet, so `updateClaw` keeps the base patch.
+	createClaw: (
+		input: CreateClawInputOf<Config>,
+	) => Promise<ClawRecordOf<Config>>;
+	getClaw: (input: { id: string }) => Promise<ClawRecordOf<Config> | null>;
 	updateClaw: (input: {
 		id: string;
 		patch: UpdateClawInput;
-	}) => Promise<ClawRecord | null>;
-	archiveClaw: (input: { id: string }) => Promise<ClawRecord | null>;
+	}) => Promise<ClawRecordOf<Config> | null>;
+	archiveClaw: (input: { id: string }) => Promise<ClawRecordOf<Config> | null>;
 
 	createThread: (input: CreateThreadInput) => Promise<ThreadRecord>;
 	getThread: (input: { id: string }) => Promise<ThreadRecord | null>;
@@ -530,7 +535,7 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 	const { context, newId } = input;
 	const store = () => requireClawsStore(context.clawsStore);
 
-	return {
+	const api = {
 		async bindConversation(args) {
 			const clawsStore = store();
 			const existing = await clawsStore.conversationBindings.getByExternal({
@@ -701,5 +706,11 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 		},
 		getRun: ({ id }) => requireRuns(context.runs).get(id),
 		listRunEvents: ({ runId }) => requireRuns(context.runs).events(runId),
-	};
+	} satisfies ClawApi;
+
+	// The claws store is typed against the base claw contract, but at runtime it persists and returns
+	// the host/plugin columns merged onto the claw model (see createClawsStore.additionalFields).
+	// Re-present those through the config-derived claw types — the single seam between the base-typed
+	// store and the config-shaped public api.
+	return api as unknown as ClawApi<Config>;
 }

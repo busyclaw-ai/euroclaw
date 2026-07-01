@@ -19,11 +19,11 @@
 	],
 	"scripts": {
 		"build": "rm -rf dist && tsc",
-		"test": "vitest run tests",
+		"test": "vitest run",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@euroclaw/core": "workspace:*",
+		"@euroclaw/contracts": "workspace:*",
 		"@euroclaw/engine-core": "workspace:*",
 		"@euroclaw/engine-sql": "workspace:*",
 		"@euroclaw/runtime": "workspace:*",
@@ -31,6 +31,7 @@
 		"arktype": "2.2.0"
 	},
 	"devDependencies": {
+		"@euroclaw/core": "workspace:*",
 		"@euroclaw/storage-core": "workspace:*",
 		"ai": "5.0.203"
 	}

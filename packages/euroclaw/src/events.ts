@@ -1,4 +1,4 @@
-import type { ClawsStore } from "@euroclaw/core";
+import type { ClawsStore } from "@euroclaw/contracts";
 import type { RuntimeEventSink } from "@euroclaw/runtime";
 
 async function findToolCall(input: {

@@ -5,7 +5,9 @@ import {
 	type EffectStore,
 	type EuroclawCronFlag,
 	type EuroclawPlugin,
-} from "@euroclaw/core";
+	type EuroclawPluginConfigureContext,
+	type InferPluginApi,
+} from "@euroclaw/contracts";
 import type {
 	ClawEngineFactory,
 	ClawEngineHandle,
@@ -13,13 +15,14 @@ import type {
 import {
 	createRuntime,
 	defaultRuntimeNewId,
+	pluginEventSink,
 	type Runtime,
 	type RuntimeConfig,
 	type RuntimeDatabase,
 	type RuntimeEventSink,
 	resolveDatabase,
 } from "@euroclaw/runtime";
-import { createClawsStore } from "@euroclaw/storage-durable";
+import { createClawsStore, createEffectStore } from "@euroclaw/storage-durable";
 import { type as ark } from "arktype";
 import {
 	type ClawApi,
@@ -30,6 +33,8 @@ import {
 	createClawApi,
 } from "./api";
 import { createClawRuntimeEventSink } from "./events";
+import type { ClawModelsConfig, RequireNoCoreColumnCollision } from "./models";
+import { collectModelFields, getEuroclawTables } from "./tables";
 
 export type {
 	BindConversationClawInput,
@@ -74,6 +79,7 @@ export type ClawConfig<Config extends RuntimeConfig = RuntimeConfig> = Omit<
 		EuroclawCronFlag
 	>;
 	events?: RuntimeEventSink | readonly RuntimeEventSink[];
+	models?: ClawModelsConfig;
 	stores?: ClawStores;
 };
 
@@ -148,7 +154,7 @@ type RequireUniquePluginRoutePaths<Config> = Config extends {
 	: unknown;
 
 export type Claw<Config extends RuntimeConfig = RuntimeConfig> = {
-	readonly api: ClawApi<Config>;
+	readonly api: ClawApi<Config> & InferPluginApi<Config>;
 	readonly $context: ClawContext<Config> & {
 		readonly audit?: AuditSink;
 		readonly approvals: Runtime<Config>["approvals"];
@@ -213,30 +219,127 @@ function assertUniquePluginRoutes(plugins: readonly EuroclawPlugin[]): void {
 	}
 }
 
+function configurePlugins(input: {
+	context: EuroclawPluginConfigureContext;
+	plugins: readonly EuroclawPlugin[];
+}): EuroclawPlugin[] {
+	return input.plugins.map((plugin) => {
+		const configured = plugin.configure?.(input.context);
+		return configured ?? plugin;
+	});
+}
+
+function assertApiContribution(input: {
+	pluginId: string;
+	value: unknown;
+}): Record<string, unknown> {
+	if (
+		input.value === null ||
+		typeof input.value !== "object" ||
+		Array.isArray(input.value)
+	) {
+		throw configurationError("euroclaw plugin api must be an object", {
+			pluginId: input.pluginId,
+		});
+	}
+	return input.value as Record<string, unknown>;
+}
+
+function createPluginApi(input: {
+	baseApi: object;
+	context: ClawContext;
+	plugins: readonly EuroclawPlugin[];
+}): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	const owners = new Map<string, string>();
+	for (const plugin of input.plugins) {
+		if (!plugin.api) continue;
+		const api = assertApiContribution({
+			pluginId: plugin.id,
+			value: plugin.api(input.context),
+		});
+		for (const [key, value] of Object.entries(api)) {
+			const previous = owners.get(key);
+			if (previous) {
+				throw configurationError("duplicate euroclaw plugin api namespace", {
+					namespace: key,
+					pluginId: plugin.id,
+					previous,
+				});
+			}
+			if (key in input.baseApi) {
+				throw configurationError(
+					"euroclaw plugin api conflicts with base api",
+					{
+						namespace: key,
+						pluginId: plugin.id,
+					},
+				);
+			}
+			owners.set(key, plugin.id);
+			out[key] = value;
+		}
+	}
+	return out;
+}
+
 export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 	config: Config &
 		RequireCronHandler<Config> &
-		RequireUniquePluginRoutePaths<Config>,
+		RequireUniquePluginRoutePaths<Config> &
+		RequireNoCoreColumnCollision<Config>,
 ): Claw<Config> {
 	const adapter = config.database
 		? resolveDatabase(config.database)
 		: undefined;
+	const pluginList = (config.plugins ?? []) as readonly EuroclawPlugin[];
+	// Fail fast at init if any plugin/host schema collides with a core column — the same collection the
+	// `generate` CLI runs, so a bad registration surfaces here, not at migration time.
+	getEuroclawTables({ models: config.models, plugins: pluginList });
+	const modelFields = collectModelFields(pluginList, config.models);
+	const clawAdditionalFields = modelFields.claw;
 	const clawsStore =
-		config.stores?.claws ?? (adapter ? createClawsStore(adapter) : undefined);
+		config.stores?.claws ??
+		(adapter
+			? createClawsStore(
+					adapter,
+					clawAdditionalFields
+						? { additionalFields: { claw: clawAdditionalFields } }
+						: {},
+				)
+			: undefined);
+	const configuredEffectStore = (config as { effectStore?: EffectStore })
+		.effectStore;
+	const effectsStore =
+		config.stores?.effects ??
+		configuredEffectStore ??
+		(adapter ? createEffectStore(adapter) : undefined);
 	const eventSinks = [
 		...(clawsStore ? [createClawRuntimeEventSink(clawsStore)] : []),
 		...eventSinksFrom(config.events),
 	];
+	const configuredPlugins = configurePlugins({
+		context: {
+			// The resolved adapter, passed through the configure context's index signature so a plugin
+			// that owns tables (e.g. skills) can build its own store — core never creates a plugin store.
+			adapter,
+			clawsStore,
+			effects: effectsStore,
+			events: pluginEventSink(eventSinks),
+		},
+		plugins: (config.plugins ?? []) as readonly EuroclawPlugin[],
+	});
 	const runtime = createRuntime({
 		...config,
+		plugins: configuredPlugins,
 		...(adapter ? { database: adapter } : {}),
-		...(config.stores?.effects ? { effectStore: config.stores.effects } : {}),
+		...(effectsStore ? { effectStore: effectsStore } : {}),
 		...(eventSinks.length > 0 ? { events: eventSinks } : {}),
 	} as Config);
 	const engine = config.engine?.create(runtime);
 	const newId = config.environment?.newId ?? defaultRuntimeNewId;
 	const plugins: EuroclawPlugin<EuroclawCronFlag>[] = [
-		...((config.plugins ?? []) as readonly EuroclawPlugin[]),
+		...configuredPlugins,
 		...(engine?.plugins ?? []),
 	];
 	assertCronHandler({ cronHandler: config.cronHandler, plugins });
@@ -246,13 +349,17 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 		approvals: runtime.approvals,
 		clawsStore,
 		cronHandler: config.cronHandler,
-		effects: runtime.effects,
+		effects: effectsStore,
 		engine: engine?.engine,
 		plugins,
 		runs: engine?.runs,
 		runtime,
 	};
-	const api = createClawApi({ context, newId });
+	const baseApi = createClawApi({ context, newId });
+	const api = {
+		...baseApi,
+		...createPluginApi({ baseApi, context, plugins }),
+	} as Claw<Config>["api"];
 
 	return {
 		$context: context,
@@ -263,3 +370,4 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 export type { Runtime, RuntimeConfig, RuntimeResult } from "@euroclaw/runtime";
 export { govern } from "@euroclaw/runtime";
 export { createClawRuntimeEventSink } from "./events";
+export { getEuroclawTables } from "./tables";
