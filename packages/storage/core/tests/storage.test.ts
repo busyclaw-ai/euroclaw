@@ -202,7 +202,7 @@ const fieldSchema = {
 				onUpdate: () => "updated",
 			},
 			secret: { type: "string", returned: false },
-			locked: { type: "string", writable: false },
+			locked: { type: "string", immutable: true },
 		},
 	},
 } satisfies SchemaDeclaration;
@@ -311,7 +311,7 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 		expect(updated?.updatedAt).toBe("manual");
 	});
 
-	it("rejects missing required fields, unknown fields, unwritable fields, and invalid JSON", async () => {
+	it("rejects missing required fields, unknown fields, immutable fields, and invalid JSON", async () => {
 		const db = schemaAdapter(memoryAdapter(), fieldSchema);
 
 		await expect(
@@ -329,7 +329,7 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 				where: [{ field: "id", value: "bad-field" }],
 				update: { locked: "new" },
 			}),
-		).rejects.toThrow(/not writable/);
+		).rejects.toThrow(/immutable/);
 		await expect(
 			db.create({
 				model: "claw",

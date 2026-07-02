@@ -105,7 +105,8 @@ export type FieldAttribute = {
 	fieldName?: string;
 	input?: boolean;
 	returned?: boolean;
-	writable?: boolean;
+	/** Set once at create, never changed by an update — the update path rejects writes to it. */
+	immutable?: boolean;
 	pii?: "none" | "possible" | "contains" | "redacted";
 	retention?: "default" | "ephemeral" | "audit" | "until-erasure";
 	defaultValue?: unknown | (() => unknown);

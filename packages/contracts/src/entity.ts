@@ -16,7 +16,9 @@ export type EntityFieldMeta = {
 	fieldName?: string;
 	input?: boolean;
 	returned?: boolean;
-	writable?: boolean;
+	/** Set once at create, never changed by an update — enforced at the storage layer, and dropped from
+	 * the derived update input. (Distinct from `input: false`, which is set by the store, not the caller.) */
+	immutable?: boolean;
 	pii?: "none" | "possible" | "contains" | "redacted";
 	retention?: "default" | "ephemeral" | "audit" | "until-erasure";
 	defaultValue?: unknown | (() => unknown);
@@ -155,6 +157,27 @@ export type EntitySchemaInput<
 		[K in SchemaOptionalKeys<Fields, Options>]?: FieldValue<Fields[K]>;
 	}
 >;
+
+/** Keys eligible for an update patch: not `immutable` (storage-mutable) and caller-facing
+ * (`input !== false`). Field factories const-capture meta, so these flags are readable literals. */
+type UpdatableKeys<Fields extends Record<string, EntityField>> = {
+	[K in keyof Fields]: Fields[K]["immutable"] extends true
+		? never
+		: Fields[K]["input"] extends false
+			? never
+			: K;
+}[keyof Fields];
+
+/**
+ * The update-patch shape derived from the fields themselves — every mutable, caller-facing field, all
+ * optional. Mutability lives on the field (the same `immutable` flag the storage layer enforces) instead
+ * of a hand-kept pick/optional list: mark identity/immutable columns `immutable: true` and
+ * server-managed ones (e.g. updatedAt) `input: false`, and the patch shape follows.
+ */
+export type EntityUpdateInput<Fields extends Record<string, EntityField>> =
+	Simplify<{
+		[K in UpdatableKeys<Fields>]?: FieldValue<Fields[K]>;
+	}>;
 
 function enumExpression(values: readonly string[]): string {
 	return values.map((value) => `'${value}'`).join(" | ");
@@ -334,7 +357,7 @@ export function entity<const Fields extends Record<string, EntityField>>(
 						fieldName: field.fieldName,
 						input: field.input,
 						returned: field.returned,
-						writable: field.writable,
+						immutable: field.immutable,
 						pii: field.pii,
 						retention: field.retention,
 						defaultValue: field.defaultValue,
@@ -360,5 +383,16 @@ export function entity<const Fields extends Record<string, EntityField>>(
 			ark(shapeFor(fields, input)) as unknown as Type<
 				EntitySchemaInput<Fields, Options>
 			>,
+		// The update-patch validator, derived from the fields' own `immutable`/`input` flags rather than a
+		// hand-listed pick/optional set — the same source of truth the storage layer enforces (see
+		// EntityUpdateInput). Every mutable, caller-facing field, all optional.
+		updateSchema: () => {
+			const keys = Object.entries(fields)
+				.filter(([, field]) => !field.immutable && field.input !== false)
+				.map(([key]) => key);
+			return ark(
+				shapeFor(fields, { pick: keys, optional: keys }),
+			) as unknown as Type<EntityUpdateInput<Fields>>;
+		},
 	};
 }

@@ -308,10 +308,10 @@ function transformUpdateData(input: {
 			model: input.model,
 			strict: input.strict,
 		});
-		if (mapping?.meta.writable === false) {
+		if (mapping?.meta.immutable === true) {
 			throw validationError(
 				`storage field ${input.model.logical}.${mapping.logical}`,
-				"is not writable",
+				"is immutable (set at create, not updatable)",
 			);
 		}
 	}
