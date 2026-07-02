@@ -25,13 +25,14 @@ const taskStatusValues = [
 ] as const;
 
 export const runFields = {
-	id: field.string({ required: true, unique: true }),
+	// A run's identity + input are fixed at create; only status advances. updatedAt is store-written.
+	id: field.string({ required: true, unique: true, immutable: true }),
 	status: field.enum(runStatusValues, { required: true, index: true }),
-	input: field.jsonObject({ required: true }),
-	actor: field.string({ index: true }),
-	team: field.string({ index: true }),
-	createdAt: field.string({ required: true }),
-	updatedAt: field.string({ required: true }),
+	input: field.jsonObject({ required: true, immutable: true }),
+	actor: field.string({ index: true, immutable: true }),
+	team: field.string({ index: true, immutable: true }),
+	createdAt: field.string({ required: true, immutable: true }),
+	updatedAt: field.string({ required: true, input: false }),
 } as const;
 
 export const runtimeTaskFields = {

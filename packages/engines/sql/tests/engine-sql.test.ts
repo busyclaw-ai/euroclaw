@@ -232,7 +232,8 @@ describe("@euroclaw/engine-sql", () => {
 			},
 		});
 
-		await expect(store.getRun("bad-run")).rejects.toThrow(/run\.input invalid/);
+		// decoded through schemaAdapter, then rejected by the run record validator (input must be an object)
+		await expect(store.getRun("bad-run")).rejects.toThrow(/run record invalid/);
 	});
 
 	it("rejects non-JSON SQL engine inputs before serialization", async () => {
@@ -240,14 +241,14 @@ describe("@euroclaw/engine-sql", () => {
 
 		await expect(
 			store.createRun({ input: { amount: Number.NaN } }),
-		).rejects.toThrow(/run\.input invalid/);
+		).rejects.toThrow(/run record invalid/);
 		await expect(
 			store.enqueueTask({
 				runId: "run-1",
 				kind: "turn",
 				payload: { nested: { fn: () => "nope" } } as never,
 			}),
-		).rejects.toThrow(/runtime_task\.payload invalid/);
+		).rejects.toThrow(/runtime task invalid: payload/);
 	});
 
 	it("worker claims a runtime.run task, executes runtime, and completes the run", async () => {
@@ -392,10 +393,11 @@ describe("@euroclaw/engine-sql", () => {
 		if (result.status !== "failed") throw new Error("expected failed result");
 		expect(result.reason).toContain("task lease lost during runtime execution");
 		await abortObserved;
-		expect(await baseStore.getTask(task.id)).toMatchObject({
-			status: "leased",
-			output: undefined,
-		});
+		const stalledTask = await baseStore.getTask(task.id);
+		expect(stalledTask).toMatchObject({ status: "leased" });
+		// A native record omits an unset optional rather than carrying an explicit `undefined`; no output
+		// persisted is what "terminal write skipped" looks like here.
+		expect(stalledTask?.output).toBeUndefined();
 		expect(await baseStore.getRun(run.id)).toMatchObject({ status: "running" });
 		expect((await baseStore.events(run.id)).map((event) => event.type)).toEqual(
 			["run.started"],

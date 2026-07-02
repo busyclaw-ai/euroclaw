@@ -12,17 +12,26 @@
  * produced here is operational state, not compliance audit; compliance evidence stays in @euroclaw/core.
  */
 
-import { jsonObject as jsonObjectSchema } from "@euroclaw/contracts";
+import {
+	type EntityUpdateInput,
+	jsonObject as jsonObjectSchema,
+} from "@euroclaw/contracts";
 import {
 	configurationError,
 	errorMessage,
 	stateError,
 	validationError,
 } from "@euroclaw/errors";
-import type { Adapter, Where } from "@euroclaw/storage-core";
+import {
+	type Adapter,
+	schemaAdapter,
+	type TableSchema,
+	type Where,
+} from "@euroclaw/storage-core";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, randomBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { type as ark } from "arktype";
+import { type runFields, sqlEngineSchema } from "./schema";
 
 export const RunStatus = ark(
 	"'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'",
@@ -35,7 +44,6 @@ export const TaskStatus = ark(
 export type TaskStatus = typeof TaskStatus.infer;
 
 const JsonRecord = jsonObjectSchema;
-const SerializedJsonObject = jsonObjectSchema;
 const OptionalString = ark("string | undefined");
 
 export const RunRecord = ark({
@@ -111,63 +119,6 @@ export const IdempotencyRecord = ark({
 });
 export type IdempotencyRecord = typeof IdempotencyRecord.infer;
 
-const OptionalDbString = ark("string | null | undefined");
-
-const RunRow = ark({
-	id: "string",
-	status: RunStatus,
-	input: "string",
-	"actor?": OptionalDbString,
-	"team?": OptionalDbString,
-	createdAt: "string",
-	updatedAt: "string",
-});
-type RunRow = typeof RunRow.infer;
-
-const TaskRow = ark({
-	id: "string",
-	runId: "string",
-	kind: "string",
-	status: TaskStatus,
-	payload: "string",
-	dueAt: "string",
-	attempt: "number",
-	maxAttempts: "number",
-	retryDelayMs: "number",
-	"leaseId?": OptionalDbString,
-	"workerId?": OptionalDbString,
-	"leasedUntil?": OptionalDbString,
-	"lastError?": OptionalDbString,
-	"output?": OptionalDbString,
-	createdAt: "string",
-	updatedAt: "string",
-	"completedAt?": OptionalDbString,
-});
-type TaskRow = typeof TaskRow.infer;
-
-const EventRow = ark({
-	id: "string",
-	runId: "string",
-	type: "string",
-	payload: "string",
-	createdAt: "string",
-});
-type EventRow = typeof EventRow.infer;
-
-const IdempotencyRow = ark({
-	id: "string",
-	key: "string",
-	method: "string",
-	path: "string",
-	"tenantId?": OptionalDbString,
-	"actor?": OptionalDbString,
-	requestHash: "string",
-	responseStatus: "number",
-	responseBody: "string",
-	createdAt: "string",
-});
-type IdempotencyRow = typeof IdempotencyRow.infer;
-
 export type SqlEngineStoreOptions = {
 	now?: () => string;
 	runModel?: string;
@@ -220,7 +171,7 @@ export type SqlEngineStore = {
 	getRun: (id: string) => Promise<RunRecord | null>;
 	updateRun: (
 		id: string,
-		patch: Partial<Pick<RunRecord, "status" | "updatedAt">>,
+		patch: EntityUpdateInput<typeof runFields>,
 	) => Promise<RunRecord | null>;
 	enqueueTask: (input: EnqueueTaskInput) => Promise<RuntimeTask>;
 	getTask: (id: string) => Promise<RuntimeTask | null>;
@@ -273,13 +224,18 @@ function addMs(iso: string, ms: number): string {
 	return new Date(Date.parse(iso) + ms).toISOString();
 }
 
-function dropUndefined<T extends Record<string, unknown>>(
-	value: T,
-): Record<string, unknown> {
-	const out: Record<string, unknown> = { ...value };
-	for (const key of Object.keys(out))
-		if (out[key] === undefined) delete out[key];
-	return out;
+/**
+ * Narrow an engine schema table — the tables are index-typed under `satisfies SchemaDeclaration` — and
+ * pin its physical model name. The tables always exist (sqlEngineSchema is built from these entities);
+ * the guard is how we narrow without a non-null assertion.
+ */
+function engineTable(
+	table: TableSchema | undefined,
+	modelName: string,
+): TableSchema {
+	if (!table)
+		throw configurationError("engine schema table missing", { modelName });
+	return { ...table, modelName };
 }
 
 function stringifyJson(value: unknown, label: string): string {
@@ -297,23 +253,6 @@ function stringifyJson(value: unknown, label: string): string {
 		if (err instanceof Error && err.name === "EuroclawError") throw err;
 		throw validationError(`${label} invalid`, errorMessage(err));
 	}
-}
-
-function parseSerializedJsonObject(
-	value: string,
-	label: string,
-): Record<string, unknown> {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(value) as unknown;
-	} catch (err) {
-		throw validationError(`${label} invalid JSON`, errorMessage(err));
-	}
-	const valid = SerializedJsonObject(parsed);
-	if (valid instanceof ark.errors) {
-		throw validationError(`${label} invalid`, valid.summary);
-	}
-	return valid;
 }
 
 function validateRunRecord(record: unknown): RunRecord {
@@ -356,129 +295,10 @@ function validateIdempotencyRecord(record: unknown): IdempotencyRecord {
 	return valid;
 }
 
-function parseRunRow(row: unknown): RunRow {
-	const valid = RunRow(row);
-	if (valid instanceof ark.errors) {
-		throw validationError("run row invalid", valid.summary);
-	}
-	return valid;
-}
-
-function parseTaskRow(row: unknown): TaskRow {
-	const valid = TaskRow(row);
-	if (valid instanceof ark.errors) {
-		throw validationError("runtime task row invalid", valid.summary);
-	}
-	return valid;
-}
-
-function parseEventRow(row: unknown): EventRow {
-	const valid = EventRow(row);
-	if (valid instanceof ark.errors) {
-		throw validationError("run event row invalid", valid.summary);
-	}
-	return valid;
-}
-
-function parseIdempotencyRow(row: unknown): IdempotencyRow {
-	const valid = IdempotencyRow(row);
-	if (valid instanceof ark.errors) {
-		throw validationError("idempotency row invalid", valid.summary);
-	}
-	return valid;
-}
-
-function runFromRow(row: unknown): RunRecord {
-	const valid = parseRunRow(row);
-	return validateRunRecord({
-		id: valid.id,
-		status: valid.status,
-		input: parseSerializedJsonObject(valid.input, "run.input"),
-		actor: valid.actor ?? undefined,
-		team: valid.team ?? undefined,
-		createdAt: valid.createdAt,
-		updatedAt: valid.updatedAt,
-	});
-}
-
-function taskFromRow(row: unknown): RuntimeTask {
-	const valid = parseTaskRow(row);
-	return validateTask({
-		id: valid.id,
-		runId: valid.runId,
-		kind: valid.kind,
-		status: valid.status,
-		payload: parseSerializedJsonObject(valid.payload, "runtime_task.payload"),
-		dueAt: valid.dueAt,
-		attempt: valid.attempt,
-		maxAttempts: valid.maxAttempts,
-		retryDelayMs: valid.retryDelayMs,
-		leaseId: valid.leaseId ?? undefined,
-		workerId: valid.workerId ?? undefined,
-		leasedUntil: valid.leasedUntil ?? undefined,
-		lastError: valid.lastError ?? undefined,
-		output:
-			valid.output == null
-				? undefined
-				: parseSerializedJsonObject(valid.output, "runtime_task.output"),
-		createdAt: valid.createdAt,
-		updatedAt: valid.updatedAt,
-		completedAt: valid.completedAt ?? undefined,
-	});
-}
-
-function eventFromRow(row: unknown): RunEvent {
-	const valid = parseEventRow(row);
-	return validateEvent({
-		id: valid.id,
-		runId: valid.runId,
-		type: valid.type,
-		payload: parseSerializedJsonObject(valid.payload, "run_event.payload"),
-		createdAt: valid.createdAt,
-	});
-}
-
-function leaseFromRow(row: unknown): LeaseRecord {
-	return validateLeaseRecord(row);
-}
-
-function idempotencyFromRow(row: unknown): IdempotencyRecord {
-	const valid = parseIdempotencyRow(row);
-	return validateIdempotencyRecord({
-		id: valid.id,
-		key: valid.key,
-		method: valid.method,
-		path: valid.path,
-		tenantId: valid.tenantId ?? undefined,
-		actor: valid.actor ?? undefined,
-		requestHash: valid.requestHash,
-		responseStatus: valid.responseStatus,
-		responseBody: parseSerializedJsonObject(
-			valid.responseBody,
-			"idempotency.responseBody",
-		),
-		createdAt: valid.createdAt,
-	});
-}
-
 function pendingWhere(now: string): Where[] {
 	return [
 		{ field: "status", value: "pending" },
 		{ field: "dueAt", value: now, operator: "lte", connector: "AND" },
-	];
-}
-
-function scopedIdempotencyWhere(input: IdempotencyLookup): Where[] {
-	return [
-		{ field: "key", value: input.key },
-		{ field: "method", value: input.method, connector: "AND" },
-		{ field: "path", value: input.path, connector: "AND" },
-		{
-			field: "tenantId",
-			value: input.tenantId ?? null,
-			connector: "AND",
-		},
-		{ field: "actor", value: input.actor ?? null, connector: "AND" },
 	];
 }
 
@@ -511,18 +331,31 @@ export function createSqlEngineStore(
 	const eventModel = options.eventModel ?? "run_event";
 	const leaseModel = options.leaseModel ?? "lease";
 	const idempotencyModel = options.idempotencyModel ?? "idempotency_key";
+	// Every engine table persists through schemaAdapter (logical↔physical names, JSON encode/decode,
+	// undefined-dropping, immutable enforcement), so the ops speak native records and never hand-roll row
+	// mapping. Each table's *Model option pins its physical name via modelName.
+	const db = schemaAdapter(adapter, {
+		run: engineTable(sqlEngineSchema.run, runModel),
+		runtime_task: engineTable(sqlEngineSchema.runtime_task, taskModel),
+		run_event: engineTable(sqlEngineSchema.run_event, eventModel),
+		lease: engineTable(sqlEngineSchema.lease, leaseModel),
+		idempotency_key: engineTable(
+			sqlEngineSchema.idempotency_key,
+			idempotencyModel,
+		),
+	});
 
 	async function validateLease(
 		task: RuntimeTask,
 		token: string,
 	): Promise<LeaseRecord | null> {
 		if (task.leaseId === undefined) return null;
-		const row = await adapter.findOne<unknown>({
-			model: leaseModel,
+		const row = await db.findOne<unknown>({
+			model: "lease",
 			where: [{ field: "id", value: task.leaseId }],
 		});
 		if (!row) return null;
-		const lease = leaseFromRow(row);
+		const lease = validateLeaseRecord(row);
 		if (lease.taskId !== task.id) return null;
 		if (lease.expiresAt <= now()) return null;
 		if (lease.tokenHash !== hashText(token)) return null;
@@ -536,80 +369,78 @@ export function createSqlEngineStore(
 
 		async createRun(input = {}) {
 			const ts = now();
-			const row: RunRow = {
+			const record = validateRunRecord({
 				id: input.id ?? newId(),
 				status: "queued",
-				input: stringifyJson(input.input ?? {}, "run.input"),
+				input: input.input ?? {},
 				actor: input.actor,
 				team: input.team,
 				createdAt: ts,
 				updatedAt: ts,
-			};
-			await adapter.create({ model: runModel, data: dropUndefined(row) });
-			return runFromRow(row);
+			});
+			await db.create({ model: "run", data: record });
+			return record;
 		},
 
 		async getRun(id) {
-			const row = await adapter.findOne<unknown>({
-				model: runModel,
+			const row = await db.findOne<unknown>({
+				model: "run",
 				where: [{ field: "id", value: id }],
 			});
-			return row ? runFromRow(row) : null;
+			return row ? validateRunRecord(row) : null;
 		},
 
 		async updateRun(id, patch) {
-			const row = await adapter.update<unknown>({
-				model: runModel,
+			// schemaAdapter drops undefined + encodes JSON; the store owns updatedAt (input:false).
+			const row = await db.update<unknown>({
+				model: "run",
 				where: [{ field: "id", value: id }],
-				update: dropUndefined({
-					...patch,
-					updatedAt: patch.updatedAt ?? now(),
-				}),
+				update: { ...patch, updatedAt: now() },
 			});
-			return row ? runFromRow(row) : null;
+			return row ? validateRunRecord(row) : null;
 		},
 
 		async enqueueTask(input) {
 			const ts = now();
-			const row: TaskRow = {
+			const record = validateTask({
 				id: input.id ?? newId(),
 				runId: input.runId,
 				kind: input.kind,
 				status: "pending",
-				payload: stringifyJson(input.payload ?? {}, "runtime_task.payload"),
+				payload: input.payload ?? {},
 				dueAt: input.dueAt ?? ts,
 				attempt: 0,
 				maxAttempts: input.maxAttempts ?? 1,
 				retryDelayMs: input.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
 				createdAt: ts,
 				updatedAt: ts,
-			};
-			await adapter.create({ model: taskModel, data: dropUndefined(row) });
-			return taskFromRow(row);
+			});
+			await db.create({ model: "runtime_task", data: record });
+			return record;
 		},
 
 		async getTask(id) {
-			const row = await adapter.findOne<unknown>({
-				model: taskModel,
+			const row = await db.findOne<unknown>({
+				model: "runtime_task",
 				where: [{ field: "id", value: id }],
 			});
-			return row ? taskFromRow(row) : null;
+			return row ? validateTask(row) : null;
 		},
 
 		async claimDueTask(input) {
 			await store.reapExpiredLeases();
 			const ts = now();
-			const candidates = await adapter.findMany<unknown>({
-				model: taskModel,
+			const candidates = await db.findMany<unknown>({
+				model: "runtime_task",
 				where: pendingWhere(ts),
 				sortBy: { field: "dueAt", direction: "asc" },
 				limit: input.limit ?? 10,
 			});
 			for (const candidateRow of candidates) {
-				const candidate = taskFromRow(candidateRow);
+				const candidate = validateTask(candidateRow);
 				if (candidate.attempt >= candidate.maxAttempts) {
-					await adapter.update<unknown>({
-						model: taskModel,
+					await db.update<unknown>({
+						model: "runtime_task",
 						where: [
 							{ field: "id", value: candidate.id },
 							{ field: "status", value: "pending", connector: "AND" },
@@ -635,9 +466,9 @@ export function createSqlEngineStore(
 					lastHeartbeatAt: ts,
 					createdAt: ts,
 				};
-				await adapter.create({ model: leaseModel, data: lease });
-				const updated = await adapter.update<unknown>({
-					model: taskModel,
+				await db.create({ model: "lease", data: lease });
+				const updated = await db.update<unknown>({
+					model: "runtime_task",
 					where: [
 						{ field: "id", value: candidate.id },
 						{ field: "status", value: "pending", connector: "AND" },
@@ -647,18 +478,18 @@ export function createSqlEngineStore(
 						leaseId,
 						workerId: input.workerId,
 						leasedUntil: expiresAt,
-						attempt: Number(candidate.attempt) + 1,
+						attempt: candidate.attempt + 1,
 						updatedAt: ts,
 					},
 				});
 				if (!updated) {
-					await adapter.delete({
-						model: leaseModel,
+					await db.delete({
+						model: "lease",
 						where: [{ field: "id", value: leaseId }],
 					});
 					continue;
 				}
-				const task = taskFromRow(updated);
+				const task = validateTask(updated);
 				await store.updateRun(task.runId, { status: "running" });
 				return { task, leaseId, leaseToken, expiresAt };
 			}
@@ -666,19 +497,19 @@ export function createSqlEngineStore(
 		},
 
 		async heartbeatLease(input) {
-			const leaseRow = await adapter.findOne<unknown>({
-				model: leaseModel,
+			const leaseRow = await db.findOne<unknown>({
+				model: "lease",
 				where: [{ field: "id", value: input.leaseId }],
 			});
 			if (!leaseRow) return null;
-			const lease = leaseFromRow(leaseRow);
+			const lease = validateLeaseRecord(leaseRow);
 			if (lease.expiresAt <= now()) return null;
 			if (lease.tokenHash !== hashText(input.leaseToken)) return null;
 			const ts = now();
 			const expiresAt = addMs(ts, input.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS);
 			const tokenHash = hashText(input.leaseToken);
-			const updated = await adapter.update<unknown>({
-				model: leaseModel,
+			const updated = await db.update<unknown>({
+				model: "lease",
 				where: [
 					{ field: "id", value: input.leaseId },
 					{ field: "tokenHash", value: tokenHash, connector: "AND" },
@@ -687,8 +518,8 @@ export function createSqlEngineStore(
 				update: { expiresAt, lastHeartbeatAt: ts },
 			});
 			if (!updated) return null;
-			await adapter.update<unknown>({
-				model: taskModel,
+			await db.update<unknown>({
+				model: "runtime_task",
 				where: [
 					{ field: "id", value: lease.taskId },
 					{ field: "status", value: "leased", connector: "AND" },
@@ -697,7 +528,7 @@ export function createSqlEngineStore(
 				],
 				update: { leasedUntil: expiresAt, updatedAt: ts },
 			});
-			return leaseFromRow(updated);
+			return validateLeaseRecord(updated);
 		},
 
 		async completeTask(input) {
@@ -706,29 +537,26 @@ export function createSqlEngineStore(
 			const lease = await validateLease(task, input.leaseToken);
 			if (!lease) return null;
 			const ts = now();
-			const row = await adapter.update<unknown>({
-				model: taskModel,
+			const row = await db.update<unknown>({
+				model: "runtime_task",
 				where: [
 					{ field: "id", value: input.taskId },
 					{ field: "status", value: "leased", connector: "AND" },
 					{ field: "leaseId", value: lease.id, connector: "AND" },
 				],
-				update: dropUndefined({
+				update: {
 					status: "completed",
-					output:
-						input.output !== undefined
-							? stringifyJson(input.output, "runtime_task.output")
-							: undefined,
+					output: input.output,
 					completedAt: ts,
 					updatedAt: ts,
-				}),
+				},
 			});
 			if (!row) return null;
-			await adapter.delete({
-				model: leaseModel,
+			await db.delete({
+				model: "lease",
 				where: [{ field: "id", value: lease.id }],
 			});
-			return taskFromRow(row);
+			return validateTask(row);
 		},
 
 		async failTask(input) {
@@ -739,14 +567,14 @@ export function createSqlEngineStore(
 			const ts = now();
 			const status: TaskStatus =
 				task.attempt >= task.maxAttempts ? "dead" : "pending";
-			const row = await adapter.update<unknown>({
-				model: taskModel,
+			const row = await db.update<unknown>({
+				model: "runtime_task",
 				where: [
 					{ field: "id", value: input.taskId },
 					{ field: "status", value: "leased", connector: "AND" },
 					{ field: "leaseId", value: lease.id, connector: "AND" },
 				],
-				update: dropUndefined({
+				update: {
 					status,
 					lastError: input.reason,
 					dueAt:
@@ -755,26 +583,26 @@ export function createSqlEngineStore(
 					workerId: null,
 					leasedUntil: null,
 					updatedAt: ts,
-				}),
+				},
 			});
-			await adapter.delete({
-				model: leaseModel,
+			await db.delete({
+				model: "lease",
 				where: [{ field: "id", value: lease.id }],
 			});
-			return row ? taskFromRow(row) : null;
+			return row ? validateTask(row) : null;
 		},
 
 		async reapExpiredLeases() {
 			const ts = now();
-			const leaseRows = await adapter.findMany<unknown>({
-				model: leaseModel,
+			const leaseRows = await db.findMany<unknown>({
+				model: "lease",
 				where: [{ field: "expiresAt", value: ts, operator: "lte" }],
 			});
 			let count = 0;
 			for (const leaseRow of leaseRows) {
-				const candidate = leaseFromRow(leaseRow);
-				const consumedLeaseRow = await adapter.consumeOne<unknown>({
-					model: leaseModel,
+				const candidate = validateLeaseRecord(leaseRow);
+				const consumedLeaseRow = await db.consumeOne<unknown>({
+					model: "lease",
 					where: [
 						{ field: "id", value: candidate.id },
 						{
@@ -786,17 +614,17 @@ export function createSqlEngineStore(
 					],
 				});
 				if (!consumedLeaseRow) continue;
-				const lease = leaseFromRow(consumedLeaseRow);
-				const taskRow = await adapter.findOne<unknown>({
-					model: taskModel,
+				const lease = validateLeaseRecord(consumedLeaseRow);
+				const taskRow = await db.findOne<unknown>({
+					model: "runtime_task",
 					where: [{ field: "id", value: lease.taskId }],
 				});
 				if (!taskRow) continue;
-				const task = taskFromRow(taskRow);
+				const task = validateTask(taskRow);
 				const status: TaskStatus =
 					task.attempt >= task.maxAttempts ? "dead" : "pending";
-				const updated = await adapter.update<unknown>({
-					model: taskModel,
+				const updated = await db.update<unknown>({
+					model: "runtime_task",
 					where: [
 						{ field: "id", value: lease.taskId },
 						{ field: "status", value: "leased", connector: "AND" },
@@ -822,24 +650,24 @@ export function createSqlEngineStore(
 		},
 
 		async appendEvent(input) {
-			const row: EventRow = {
+			const record = validateEvent({
 				id: newId(),
 				runId: input.runId,
 				type: input.type,
-				payload: stringifyJson(input.payload ?? {}, "run_event.payload"),
+				payload: input.payload ?? {},
 				createdAt: now(),
-			};
-			await adapter.create({ model: eventModel, data: row });
-			return eventFromRow(row);
+			});
+			await db.create({ model: "run_event", data: record });
+			return record;
 		},
 
 		async events(runId) {
-			const rows = await adapter.findMany<unknown>({
-				model: eventModel,
+			const rows = await db.findMany<unknown>({
+				model: "run_event",
 				where: [{ field: "runId", value: runId }],
 				sortBy: { field: "createdAt", direction: "asc" },
 			});
-			return rows.map(eventFromRow);
+			return rows.map((row) => validateEvent(row));
 		},
 
 		requestHash(body) {
@@ -847,12 +675,15 @@ export function createSqlEngineStore(
 		},
 
 		async getIdempotency(input) {
-			const row = await adapter.findOne<unknown>({
-				model: idempotencyModel,
-				where: scopedIdempotencyWhere(input),
+			// The id IS the hash of the scope tuple (key/method/path/tenantId/actor), so a primary-key
+			// lookup is exactly the scoped match — and it sidesteps `WHERE col = NULL` (never true in SQL,
+			// and undefined !== null in the memory adapter) for absent tenant/actor.
+			const row = await db.findOne<unknown>({
+				model: "idempotency_key",
+				where: [{ field: "id", value: idempotencyId(input) }],
 			});
 			if (!row) return null;
-			const record = idempotencyFromRow(row);
+			const record = validateIdempotencyRecord(row);
 			if (record.requestHash !== input.requestHash) {
 				throw stateError(
 					"idempotency key reused with a different request body",
@@ -869,32 +700,26 @@ export function createSqlEngineStore(
 		async saveIdempotency(input) {
 			const existing = await store.getIdempotency(input);
 			if (existing) return existing;
-			const row: IdempotencyRow = {
+			const record = validateIdempotencyRecord({
 				id: idempotencyId(input),
 				key: input.key,
 				method: input.method,
 				path: input.path,
-				tenantId: input.tenantId ?? null,
-				actor: input.actor ?? null,
+				tenantId: input.tenantId,
+				actor: input.actor,
 				requestHash: input.requestHash,
 				responseStatus: input.responseStatus,
-				responseBody: stringifyJson(
-					input.responseBody,
-					"idempotency.responseBody",
-				),
+				responseBody: input.responseBody,
 				createdAt: now(),
-			};
+			});
 			try {
-				await adapter.create({
-					model: idempotencyModel,
-					data: dropUndefined(row),
-				});
+				await db.create({ model: "idempotency_key", data: record });
 			} catch (err) {
 				const raced = await store.getIdempotency(input);
 				if (raced) return raced;
 				throw err;
 			}
-			return idempotencyFromRow(row);
+			return record;
 		},
 	};
 
