@@ -5,9 +5,10 @@
 
 import type { Adapter, Where } from "@euroclaw/contracts";
 import { validationError } from "@euroclaw/contracts";
+import { schemaAdapter } from "@euroclaw/storage-core";
 import { bytesToHex, randomBytes } from "@noble/hashes/utils.js";
 import { type } from "arktype";
-import { teamInviteRecord, teamMemberRecord } from "./schema";
+import { teamInviteRecord, teamMemberRecord, teamSchema } from "./schema";
 
 // The row shapes ARE the team entities' own arktype records — one source of truth shared with the
 // schema/migration declarations. Reads are untrusted boundary data (rows from any adapter back this
@@ -57,6 +58,9 @@ export function createTeamStore(
 	options: TeamStoreOptions = {},
 ): TeamStore {
 	const now = options.now ?? (() => new Date().toISOString());
+	// Persist through the schema-aware adapter like every sibling store — logical names, decode
+	// normalization (SQL NULL → absent), immutable enforcement.
+	const db = schemaAdapter(adapter, teamSchema);
 	const memberWhere = (team: string, userId: string): Where[] => [
 		{ field: "team", value: team },
 		{ field: "userId", value: userId, connector: "AND" },
@@ -71,13 +75,13 @@ export function createTeamStore(
 				role,
 				createdAt: now(),
 			};
-			await adapter.create({ model: "team_invite", data: invite });
+			await db.create({ model: "team_invite", data: invite });
 			return invite;
 		},
 
 		async accept(inviteId, userId) {
 			// Single-use: atomically consume the invite, then create the membership.
-			const inviteRow = await adapter.consumeOne<Record<string, unknown>>({
+			const inviteRow = await db.consumeOne<Record<string, unknown>>({
 				model: "team_invite",
 				where: [{ field: "id", value: inviteId }],
 			});
@@ -90,12 +94,12 @@ export function createTeamStore(
 				role: invite.role,
 				joinedAt: now(),
 			};
-			await adapter.create({ model: "team_member", data: member });
+			await db.create({ model: "team_member", data: member });
 			return member;
 		},
 
 		async members(team) {
-			const rows = await adapter.findMany<Record<string, unknown>>({
+			const rows = await db.findMany<Record<string, unknown>>({
 				model: "team_member",
 				where: [{ field: "team", value: team }],
 			});
@@ -103,7 +107,7 @@ export function createTeamStore(
 		},
 
 		async roleOf(team, userId) {
-			const row = await adapter.findOne<Record<string, unknown>>({
+			const row = await db.findOne<Record<string, unknown>>({
 				model: "team_member",
 				where: memberWhere(team, userId),
 			});
@@ -111,7 +115,7 @@ export function createTeamStore(
 		},
 
 		async remove(team, userId) {
-			await adapter.delete({
+			await db.delete({
 				model: "team_member",
 				where: memberWhere(team, userId),
 			});

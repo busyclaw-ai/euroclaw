@@ -1,10 +1,13 @@
 import type { Adapter, Where } from "@euroclaw/contracts";
 import {
+	configurationError,
 	type PiiMapping,
 	type PiiMappingStore,
-	piiMapping as piiMappingSchema,
+	piiMapping as piiMappingRecord,
+	piiMappingSchema,
 	validationError,
 } from "@euroclaw/contracts";
+import { schemaAdapter } from "@euroclaw/storage-core";
 import { type } from "arktype";
 
 export type PiiMappingStoreOptions = {
@@ -13,7 +16,7 @@ export type PiiMappingStoreOptions = {
 };
 
 function validateMapping(value: unknown): PiiMapping {
-	const valid = piiMappingSchema(value);
+	const valid = piiMappingRecord(value);
 	if (valid instanceof type.errors) {
 		throw validationError("PII mapping invalid", valid.summary);
 	}
@@ -66,14 +69,22 @@ export function createPiiMappingStore(
 	adapter: Adapter,
 	options: PiiMappingStoreOptions = {},
 ): PiiMappingStore {
-	const model = options.model ?? "pii_mapping";
+	// Persist through the schema-aware adapter (the options.model override rides modelName — the
+	// engine-sql precedent). The decode normalizes SQL NULL scope columns to absent, which is what
+	// the === scope comparison expects — hand-rolled reads broke on real SQL backends here.
+	const table = piiMappingSchema.pii_mapping;
+	if (!table) throw configurationError("pii_mapping schema missing", {});
+	const db = schemaAdapter(adapter, {
+		pii_mapping: { ...table, modelName: options.model ?? "pii_mapping" },
+	});
+	const model = "pii_mapping";
 	return {
 		durable: true,
 
 		async save(mapping) {
 			const valid = validateMapping(mapping);
 			const existing = (
-				await adapter.findMany<PiiMapping>({
+				await db.findMany<PiiMapping>({
 					model,
 					where: [{ field: "placeholder", value: valid.placeholder }],
 				})
@@ -81,19 +92,19 @@ export function createPiiMappingStore(
 				.map(validateMapping)
 				.find((row) => sameScope(row, valid));
 			if (existing) {
-				await adapter.update({
+				await db.update({
 					model,
 					where: mappingWhere(valid),
 					update: valid,
 				});
 				return;
 			}
-			await adapter.create({ model, data: valid });
+			await db.create({ model, data: valid });
 		},
 
 		async resolve(placeholder, ctx) {
 			const row = (
-				await adapter.findMany<PiiMapping>({
+				await db.findMany<PiiMapping>({
 					model,
 					where: [{ field: "placeholder", value: placeholder }],
 				})
@@ -112,7 +123,7 @@ export function createPiiMappingStore(
 					connector: "AND",
 				});
 			}
-			await adapter.deleteMany({
+			await db.deleteMany({
 				model,
 				where,
 			});
