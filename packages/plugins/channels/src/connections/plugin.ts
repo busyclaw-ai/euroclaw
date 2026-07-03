@@ -15,8 +15,8 @@ import { type } from "arktype";
 import { assertUniqueProviders, contextAdapter } from "../channels/plugin";
 import { requireClaw } from "../core/claw";
 import {
-	APP_ENDPOINT_KEY,
 	type Channel,
+	ENDPOINT_SEGMENT,
 	type EndpointContext,
 } from "../core/contracts";
 import { dispatchWebhook, pollEndpoint } from "../core/dispatch";
@@ -175,9 +175,16 @@ function buildPlugin(
 		return valid;
 	};
 
+	// Connections bind under a namespaced key: app bots own the bare binding-key space, so the two
+	// plugins' conversation bindings are disjoint by construction — an app bot named "sales" and a
+	// connection registered as "sales" never share rows (and a connection can never satisfy a
+	// provider's code-key comparison, so it can never be served with the app bot's credentials).
+	const bindingKey = (row: ChannelConnectionRecord): string =>
+		`connections/${row.endpointKey}`;
+
 	const contextFor = (row: ChannelConnectionRecord): EndpointContext => ({
 		provider: row.provider,
-		endpointKey: row.endpointKey,
+		endpointKey: bindingKey(row),
 		mode: row.mode,
 		secret: row.secret,
 		webhookSecret: row.webhookSecret,
@@ -195,13 +202,13 @@ function buildPlugin(
 				reason: "pass this provider's channel to channelConnections([...])",
 			});
 		}
-		if (input.endpointKey === APP_ENDPOINT_KEY) {
-			// The app's own bot binds under this key — a connection sharing it would land in the same
-			// (provider, endpointKey) binding space and cross-wire conversations.
-			throw configurationError("reserved connection key", {
+		// The key is the connection's webhook path segment — enforce that shape (collisions with app
+		// bots are impossible regardless: connections bind under the connections/ namespace).
+		if (!ENDPOINT_SEGMENT.test(input.endpointKey)) {
+			throw configurationError("invalid connection key", {
 				endpointKey: input.endpointKey,
 				provider: input.provider,
-				reason: `"${APP_ENDPOINT_KEY}" is the app bot's endpoint key — pick another`,
+				reason: "an endpointKey is a URL path segment: A-Z a-z 0-9 _ -",
 			});
 		}
 		if (input.mode === "poll" && !pollEnabled) {

@@ -11,6 +11,7 @@ import { requireClaw } from "../core/claw";
 import {
 	APP_ENDPOINT_KEY,
 	type Channel,
+	ENDPOINT_SEGMENT,
 	type EndpointContext,
 } from "../core/contracts";
 import { dispatchWebhook, pollEndpoint } from "../core/dispatch";
@@ -92,6 +93,54 @@ type RequireDistinctChannels<List extends readonly unknown[]> =
 		? DuplicateChannelError
 		: unknown;
 
+// ── compile-time mirror of ENDPOINT_SEGMENT — literal names walk the same alphabet ───────────────
+
+type CharsOf<S extends string> = S extends `${infer Head}${infer Tail}`
+	? Head | CharsOf<Tail>
+	: never;
+// Union-building recursion is not tail-eliminated (depth ~50), so the alphabet comes in chunks.
+type SegmentChar =
+	| CharsOf<"ABCDEFGHIJKLMNOPQRSTUVWXYZ">
+	| CharsOf<"abcdefghijklmnopqrstuvwxyz">
+	| CharsOf<"0123456789_-">;
+
+type IsSegment<S extends string> = S extends ""
+	? false
+	: S extends `${infer Head}${infer Tail}`
+		? Head extends SegmentChar
+			? Tail extends ""
+				? true
+				: IsSegment<Tail>
+			: false
+		: false;
+
+/** A channel's literal name that fails the segment walk — `never` for valid, wide, or unnamed. */
+type InvalidNameOf<C> = C extends { readonly name: infer N extends string }
+	? string extends N
+		? never
+		: IsSegment<N> extends true
+			? never
+			: N
+	: never;
+
+type AnyInvalidName<List extends readonly unknown[]> = List extends readonly [
+	infer Head,
+	...infer Tail,
+]
+	? [InvalidNameOf<Head>] extends [never]
+		? AnyInvalidName<Tail>
+		: true
+	: false;
+
+type InvalidChannelNameError = {
+	readonly "ERROR: a channel name must be a URL path segment (A-Z a-z 0-9 _ -)": never;
+	readonly "FIX: rename the bot — telegram({ name: 'sales' })": never;
+};
+
+/** Literal names must be path segments; wide strings fall back to the runtime check. */
+type RequireValidChannelNames<List extends readonly unknown[]> =
+	AnyInvalidName<List> extends true ? InvalidChannelNameError : unknown;
+
 // The webhook mounts for the app's own bots: a provider's unnamed bot answers on the bare path,
 // named bots each get their own segment — the genericOAuth `/oauth2/callback/:providerId` model.
 // User-registered bots are the channelConnections plugin's route, not these.
@@ -127,6 +176,15 @@ export function assertUniqueProviders(channels: readonly Channel[]): void {
 function assertUniqueChannelKeys(channels: readonly Channel[]): void {
 	const keys = new Set<string>();
 	for (const channel of channels) {
+		// A name is the bot's webhook path segment — enforce that (and the segment charset keeps the
+		// connections/ binding-key prefix unforgeable).
+		if (channel.name !== undefined && !ENDPOINT_SEGMENT.test(channel.name)) {
+			throw configurationError("invalid channel name", {
+				name: channel.name,
+				provider: channel.provider,
+				reason: "a name is a URL path segment: A-Z a-z 0-9 _ -",
+			});
+		}
 		const key = `${channel.provider}:${keyOf(channel)}`;
 		if (keys.has(key)) {
 			throw configurationError("duplicate channel", {
@@ -147,7 +205,7 @@ function assertUniqueChannelKeys(channels: readonly Channel[]): void {
  * user-registered bots see channelConnections (the SSO analog).
  */
 export function channels<const List extends readonly PollAware[]>(
-	list: List & RequireDistinctChannels<List>,
+	list: List & RequireDistinctChannels<List> & RequireValidChannelNames<List>,
 	options: ChannelsPluginOptions = {},
 ): ChannelsPlugin<ChannelsCronFlag<List>> {
 	// buildChannelsPlugin sets $HasCron at runtime from the same poll-endpoint check AnyPoll folds at

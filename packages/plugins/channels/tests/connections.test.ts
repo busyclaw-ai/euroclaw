@@ -151,7 +151,35 @@ describe("channelConnections plugin", () => {
 		).rejects.toThrow(/unknown channel provider/);
 	});
 
-	it("rejects the reserved app-bot key — it would share the app bot's binding space", async () => {
+	it("binds even a connection named 'default' disjointly from the app bot", async () => {
+		const recorded = { binds: [] as unknown[], relayed: [] as string[] };
+		const plugin = configured(channelConnections([fakeChannel()]));
+		const api = plugin.api?.({}) as {
+			channels: {
+				connections: { register: (input: unknown) => Promise<unknown> };
+			};
+		};
+		// no reserved words: the connections/ namespace makes any key safe
+		await api.channels.connections.register({
+			provider: "fake",
+			endpointKey: "default",
+			mode: "webhook",
+		});
+		const route = plugin.routes?.[0];
+		if (!route) throw new Error("expected the connections webhook route");
+		const ok = await route.handler({
+			claw: fakeClaw(recorded),
+			params: { endpointKey: "default", provider: "fake" },
+			request: webhookRequest({ body: "hello" }),
+		});
+		expect(ok.status).toBe(200);
+		// the app bot's unnamed key is "default"; this binding lives elsewhere
+		expect(recorded.binds).toMatchObject([
+			{ endpointKey: "connections/default" },
+		]);
+	});
+
+	it("rejects a connection key that is not a URL path segment", async () => {
 		const plugin = configured(channelConnections([fakeChannel()]));
 		const api = plugin.api?.({}) as {
 			channels: {
@@ -161,10 +189,10 @@ describe("channelConnections plugin", () => {
 		await expect(
 			api.channels.connections.register({
 				provider: "fake",
-				endpointKey: "default",
+				endpointKey: "acme/bot",
 				mode: "webhook",
 			}),
-		).rejects.toThrow(/reserved connection key/);
+		).rejects.toThrow(/invalid connection key/);
 	});
 
 	it("rejects poll-mode registration unless poll is enabled", async () => {
@@ -220,11 +248,12 @@ describe("channelConnections plugin", () => {
 		});
 		expect(ok.status).toBe(200);
 		expect(recorded.relayed).toEqual(["hello"]);
-		// the row's tenant + claw defaults drove the bind — tenancy never touched transport identity
+		// the row's tenant + claw defaults drove the bind — tenancy never touched transport identity,
+		// and the binding key is namespaced so it can never collide with an app bot's
 		expect(recorded.binds).toMatchObject([
 			{
 				provider: "fake",
-				endpointKey: "acme-bot",
+				endpointKey: "connections/acme-bot",
 				claw: { tenantId: "org-acme", name: "Acme bot" },
 			},
 		]);

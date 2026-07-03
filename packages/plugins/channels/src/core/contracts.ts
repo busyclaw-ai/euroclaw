@@ -82,10 +82,18 @@ export type PersistEndpointEvent = (event: EndpointEvent) => Promise<unknown>;
  * constant (webhook: `/channels/:provider/webhook`); additional bots of the same provider carry a
  * `name`, which becomes their endpoint key and their path segment
  * (`/channels/:provider/webhook/:name`) — the genericOAuth model, where the discriminator is in the
- * callback URL. channelConnections refuses to register a connection with this key: it would share
- * the unnamed app bot's binding space and cross-wire conversations.
+ * callback URL. App bots own the BARE binding-key namespace; registered connections bind under a
+ * `connections/` prefix, so the two plugins' binding spaces are disjoint by construction.
  */
 export const APP_ENDPOINT_KEY = "default";
+
+/**
+ * Names and connection keys are URL path segments (`/webhook/:name`,
+ * `/connections/:endpointKey/webhook`), so they must be single segments — telegram's own
+ * secret_token charset. This also makes the `connections/` binding-key prefix unforgeable: a raw
+ * name can never contain a slash.
+ */
+export const ENDPOINT_SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 /**
  * The behavioral contract every channel implements — the OAuthProvider analog, but bidirectional
@@ -97,8 +105,8 @@ export interface Channel {
 	readonly provider: string;
 	/**
 	 * Distinguishes multiple app bots of one provider — it becomes the bot's endpoint key and its
-	 * webhook path segment. Optional for a provider's only bot; channels() requires distinct
-	 * (provider, name) pairs at compile time and at runtime.
+	 * webhook path segment (a single ENDPOINT_SEGMENT). Optional for a provider's only bot;
+	 * channels() requires distinct (provider, name) pairs at compile time and at runtime.
 	 */
 	readonly name?: string;
 	readonly supports: { readonly webhook: boolean; readonly poll: boolean };

@@ -1,6 +1,6 @@
 import { memoryAdapter, schemaAdapter } from "@euroclaw/storage-core";
 import { describe, expect, it } from "vitest";
-import { channels, channelsSchema } from "../src/index";
+import { type Channel, channels, channelsSchema } from "../src/index";
 import { telegram, telegramWebhookSecret } from "../src/telegram/index";
 
 // A fake claw that records binds and completes without reply text (so no Bot API egress happens).
@@ -107,6 +107,14 @@ describe("channels plugin — named bots (the genericOAuth model)", () => {
 			request: webhookRequest({ body: update, secret: "irrelevant" }),
 		});
 		expect(unknown.status).toBe(404);
+	});
+
+	it("runtime-rejects a non-segment bot name (the compile-time walk's mirror)", () => {
+		// widened to Channel[] so the literal-name walk can't see it — runtime must
+		const bad: Channel[] = [
+			telegram({ token: "t", name: "connections/sneaky" }),
+		];
+		expect(() => channels(bad)).toThrow(/invalid channel name/);
 	});
 
 	it("mounts no named route when every bot is unnamed", () => {

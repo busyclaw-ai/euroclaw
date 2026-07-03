@@ -96,4 +96,13 @@ describe("channel naming requirement", () => {
 			telegram({ token: "b", name: "sales" }),
 		]);
 	});
+
+	test("a name must be a URL path segment, statically", () => {
+		// @ts-expect-error — "/" is not a path-segment character
+		channels([telegram({ token: "t", name: "connections/sneaky" })]);
+		// @ts-expect-error — neither is a space
+		channels([telegram({ token: "t", name: "sales bot" })]);
+		// the full segment alphabet compiles
+		channels([telegram({ token: "t", name: "Sales_bot-2" })]);
+	});
 });
