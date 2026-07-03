@@ -10,6 +10,7 @@ import type {
 	ToolEffectPolicy,
 } from "@euroclaw/contracts";
 import {
+	type Adapter,
 	CLAW_ID_CONTEXT_KEY,
 	configurationError,
 	jsonValue as jsonValueSchema,
@@ -42,7 +43,6 @@ import {
 	type MembershipResolver,
 	type TenantResolver,
 } from "./context";
-import { type RuntimeDatabase, resolveDatabase } from "./database";
 import {
 	createRuntimeEvent,
 	emitRuntimeEvent,
@@ -96,7 +96,7 @@ export type RuntimeConfig = {
 	audit?: AuditSink;
 	effectStore?: EffectStore;
 	effectLeaseTtlMs?: number;
-	database?: RuntimeDatabase;
+	database?: Adapter;
 	environment?: RuntimeEnvironment;
 	events?: RuntimeEventSink | readonly RuntimeEventSink[];
 	plugins?: readonly EuroclawPlugin[];
@@ -381,9 +381,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 	const maxSteps = config.maxSteps ?? 8;
 	const tools = config.tools ?? {};
 	const eventSinks = eventSinksFrom(config.events);
-	const adapter = config.database
-		? resolveDatabase(config.database)
-		: undefined;
+	const adapter = config.database;
 	if (adapter && config.redactor?.durable !== true) {
 		throw configurationError(
 			"database-backed runtime approvals require a durable redactor",

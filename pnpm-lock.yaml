@@ -74,9 +74,15 @@ importers:
       '@euroclaw/storage-durable':
         specifier: workspace:*
         version: link:../storage/durable
+      '@euroclaw/storage-kysely':
+        specifier: workspace:*
+        version: link:../storage/kysely
       arktype:
         specifier: 2.2.0
         version: 2.2.0
+      kysely:
+        specifier: 0.29.2
+        version: 0.29.2
     devDependencies:
       '@euroclaw/core':
         specifier: workspace:*
@@ -229,9 +235,6 @@ importers:
       '@euroclaw/storage-durable':
         specifier: workspace:*
         version: link:../storage/durable
-      '@euroclaw/storage-kysely':
-        specifier: workspace:*
-        version: link:../storage/kysely
       '@noble/hashes':
         specifier: 2.2.0
         version: 2.2.0
@@ -241,9 +244,6 @@ importers:
       arktype:
         specifier: 2.2.0
         version: 2.2.0
-      kysely:
-        specifier: 0.29.2
-        version: 0.29.2
     devDependencies:
       '@euroclaw/storage-core':
         specifier: workspace:*

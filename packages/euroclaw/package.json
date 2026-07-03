@@ -27,7 +27,9 @@
 		"@euroclaw/engine-sql": "workspace:*",
 		"@euroclaw/runtime": "workspace:*",
 		"@euroclaw/storage-durable": "workspace:*",
-		"arktype": "2.2.0"
+		"@euroclaw/storage-kysely": "workspace:*",
+		"arktype": "2.2.0",
+		"kysely": "0.29.2"
 	},
 	"devDependencies": {
 		"@euroclaw/core": "workspace:*",

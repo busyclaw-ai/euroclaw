@@ -1,5 +1,6 @@
 import type { ClawEngineFactory, ClawEngineHandle } from "@euroclaw/contracts";
 import {
+	type Adapter,
 	type AuditSink,
 	type ClawsStore,
 	configurationError,
@@ -15,9 +16,7 @@ import {
 	pluginEventSink,
 	type Runtime,
 	type RuntimeConfig,
-	type RuntimeDatabase,
 	type RuntimeEventSink,
-	resolveDatabase,
 } from "@euroclaw/runtime";
 import { schemaAdapter } from "@euroclaw/storage-core";
 import { createClawsStore, createEffectStore } from "@euroclaw/storage-durable";
@@ -30,6 +29,7 @@ import {
 	clawCronHandlerUnsafeConfig,
 	createClawApi,
 } from "./api";
+import { type ClawDatabase, resolveDatabase } from "./database";
 import { createClawRuntimeEventSink } from "./events";
 import type { ClawModelsConfig, RequireNoCoreColumnCollision } from "./models";
 import { collectModelFields, getEuroclawTables } from "./tables";
@@ -72,7 +72,7 @@ export type ClawConfig<Config extends RuntimeConfig = RuntimeConfig> = Omit<
 	"database" | "effectStore" | "events"
 > & {
 	cronHandler?: ClawCronHandlerConfig;
-	database?: RuntimeDatabase;
+	database?: ClawDatabase;
 	engine?: ClawEngineFactory<
 		Runtime<Config>,
 		ClawEngineHandle,
@@ -82,6 +82,13 @@ export type ClawConfig<Config extends RuntimeConfig = RuntimeConfig> = Omit<
 	models?: ClawModelsConfig;
 	stores?: ClawStores;
 };
+
+/**
+ * The config as everything past the intake sees it: `database` resolved to the storage protocol.
+ * An intersection (not an Omit re-derivation) so TS can prove it satisfies RuntimeConfig for any
+ * Config extending ClawConfig.
+ */
+type ResolvedConfig<Config> = Config & { database?: Adapter };
 
 type EngineCronFlag<Config> = Config extends {
 	engine: ClawEngineFactory<infer _RuntimeLike, infer _Handle, infer HasCron>;
@@ -288,7 +295,7 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 		RequireCronHandler<Config> &
 		RequireUniquePluginRoutePaths<Config> &
 		RequireNoCoreColumnCollision<Config>,
-): Claw<Config> {
+): Claw<ResolvedConfig<Config>> {
 	const adapter = config.database
 		? resolveDatabase(config.database)
 		: undefined;
@@ -327,7 +334,11 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 			// The resolved adapter, wrapped ONCE with the merged tables (better-auth builds its adapter
 			// with the full getAuthTables schema the same way) and passed through the configure context's
 			// index signature. Plugins that own tables build their stores on it directly — they speak
-			// logical model/field names and never wrap adapters themselves.
+			// logical model/field names and never wrap adapters themselves. The storage-durable stores
+			// above deliberately take the RAW adapter instead and wrap internally: they ARE the storage
+			// layer (schemaAdapter is theirs to use), and their constructors are public host API — the
+			// wrap-once rule exists to keep PLUGINS free of the storage implementation, not to move
+			// every wrap to the assembly.
 			adapter: adapter ? schemaAdapter(adapter, tables) : undefined,
 			clawsStore,
 			effects: effectsStore,
@@ -341,7 +352,7 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 		...(adapter ? { database: adapter } : {}),
 		...(effectsStore ? { effectStore: effectsStore } : {}),
 		...(eventSinks.length > 0 ? { events: eventSinks } : {}),
-	} as Config);
+	} as ResolvedConfig<Config>);
 	const engine = config.engine?.create(runtime);
 	const newId = config.environment?.newId ?? defaultRuntimeNewId;
 	const plugins: EuroclawPlugin<EuroclawCronFlag>[] = [
@@ -350,7 +361,7 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 	];
 	assertCronHandler({ cronHandler: config.cronHandler, plugins });
 	assertUniquePluginRoutes(plugins);
-	const context: Claw<Config>["$context"] = {
+	const context: Claw<ResolvedConfig<Config>>["$context"] = {
 		audit: runtime.audit,
 		approvals: runtime.approvals,
 		clawsStore,
@@ -365,7 +376,7 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 	const api = {
 		...baseApi,
 		...createPluginApi({ baseApi, context, plugins }),
-	} as Claw<Config>["api"];
+	} as Claw<ResolvedConfig<Config>>["api"];
 
 	return {
 		$context: context,
@@ -375,5 +386,6 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 
 export type { Runtime, RuntimeConfig, RuntimeResult } from "@euroclaw/runtime";
 export { govern } from "@euroclaw/runtime";
+export type { ClawDatabase } from "./database";
 export { createClawRuntimeEventSink } from "./events";
 export { getEuroclawTables } from "./tables";

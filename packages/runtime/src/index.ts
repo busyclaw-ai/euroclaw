@@ -2,8 +2,6 @@ export type { ToolGovernance } from "@euroclaw/contracts";
 export { govern } from "@euroclaw/contracts";
 export * from "./catalog";
 export * from "./context";
-export type { RuntimeDatabase } from "./database";
-export { resolveDatabase } from "./database";
 export type {
 	RuntimeEvent,
 	RuntimeEventBase,

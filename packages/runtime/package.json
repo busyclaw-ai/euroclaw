@@ -26,11 +26,9 @@
 		"@euroclaw/contracts": "workspace:*",
 		"@euroclaw/core": "workspace:*",
 		"@euroclaw/storage-durable": "workspace:*",
-		"@euroclaw/storage-kysely": "workspace:*",
 		"@noble/hashes": "2.2.0",
 		"ai": "5.0.203",
-		"arktype": "2.2.0",
-		"kysely": "0.29.2"
+		"arktype": "2.2.0"
 	},
 	"devDependencies": {
 		"@euroclaw/storage-core": "workspace:*"
