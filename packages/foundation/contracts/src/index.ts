@@ -261,3 +261,14 @@ export {
 	runCheckpointSchema,
 	runCheckpointStatus,
 } from "./run-checkpoint";
+// ── the storage protocol (implementations live in @euroclaw/storage-*) ────────
+export type {
+	Adapter,
+	FieldAttribute,
+	FieldType,
+	SchemaDeclaration,
+	SortBy,
+	TableSchema,
+	Where,
+	WhereOperator,
+} from "./storage";
