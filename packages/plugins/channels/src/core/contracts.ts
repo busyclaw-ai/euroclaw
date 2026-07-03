@@ -94,6 +94,12 @@ export interface Channel {
 	readonly supports: { readonly webhook: boolean; readonly poll: boolean };
 	/** Endpoints declared in code — the app's own bots; their clients live on the channel. */
 	readonly codeEndpoints: readonly CodeEndpoint[];
+	/**
+	 * Assert the code-declared configuration is usable (credentials present after env fallbacks).
+	 * channels() calls this at construction so a dead app bot fails at startup, not on first traffic;
+	 * channelConnections never calls it — a bare transport's credentials live on the rows.
+	 */
+	validate?: () => void;
 	/** Extract the endpoint key from a request (default: the route key). Fan-in overrides. */
 	identify?: (request: InboundRequest) => string | undefined;
 	/**

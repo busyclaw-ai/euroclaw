@@ -106,6 +106,9 @@ function buildChannelsPlugin(
 	store: ChannelEndpointStateStore | undefined,
 ): ChannelsPlugin {
 	assertUniqueChannels(list);
+	// Every channel here is an app bot — fail at startup, not on first traffic, if one is unusable
+	// (e.g. no token in config and none in the environment).
+	for (const channel of list) channel.validate?.();
 	const now = options.now ?? (() => new Date().toISOString());
 	// Safe to key by provider: assertUniqueChannels guarantees one channel per provider.
 	const byProvider = new Map(

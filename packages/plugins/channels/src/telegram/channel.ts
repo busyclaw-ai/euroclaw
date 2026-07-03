@@ -179,6 +179,18 @@ export function telegram(
 		// Phantom-ish marker read by channels() at the type level; its runtime value tracks the mode.
 		$poll: mode === "poll",
 
+		validate() {
+			// Called by channels() only: an app bot without a token (config or TELEGRAM_BOT_TOKEN) can
+			// never send, poll, or verify — refuse at startup instead of erroring on first traffic.
+			if (!codeToken) {
+				throw configurationError("telegram bot has no token", {
+					endpointKey,
+					reason:
+						"pass telegram({ token }) or set the TELEGRAM_BOT_TOKEN environment variable",
+				});
+			}
+		},
+
 		verify({ request, endpoint }) {
 			// A connection row's explicit webhookSecret wins; otherwise the secret derives from the bot
 			// token (telegramWebhookSecret) — no second credential to configure. No token at all fails

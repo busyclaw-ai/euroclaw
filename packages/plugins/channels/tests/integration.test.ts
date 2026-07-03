@@ -4,7 +4,7 @@ import { memoryAdapter } from "@euroclaw/storage-core";
 import { createPiiMappingStore } from "@euroclaw/storage-durable";
 import type { wrapLanguageModel } from "ai";
 import { createClaw, getEuroclawTables } from "euroclaw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { channelConnections } from "../src/connections/index";
 import { channels } from "../src/index";
 import { telegram } from "../src/telegram/index";
@@ -95,6 +95,35 @@ describe("channels ↔ euroclaw integration", () => {
 		expect(() =>
 			channels([appBot(), telegram({ endpointKey: "other" })]),
 		).toThrow(/duplicate channel provider/);
+	});
+
+	it("fails at startup when an app bot has no token anywhere", () => {
+		vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+		try {
+			// a dead bot fails at wiring time, not on first traffic
+			expect(() => channels([telegram()])).toThrow(/telegram bot has no token/);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("resolves the token from TELEGRAM_BOT_TOKEN at startup", () => {
+		vi.stubEnv("TELEGRAM_BOT_TOKEN", "env-token");
+		try {
+			expect(() => channels([telegram()])).not.toThrow();
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("keeps bare telegram() valid as a connections transport — no startup token check", () => {
+		vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+		try {
+			// credentials live on the rows; the transport itself needs none
+			expect(() => channelConnections([telegram()])).not.toThrow();
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it("rejects a plugin schema that redefines a core claw column at createClaw", () => {
