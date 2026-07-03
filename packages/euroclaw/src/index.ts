@@ -11,7 +11,7 @@ import {
 import type {
 	ClawEngineFactory,
 	ClawEngineHandle,
-} from "@euroclaw/engine-core";
+} from "@euroclaw/contracts";
 import {
 	createRuntime,
 	defaultRuntimeNewId,

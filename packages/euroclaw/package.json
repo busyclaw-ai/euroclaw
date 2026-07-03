@@ -24,7 +24,6 @@
 	},
 	"dependencies": {
 		"@euroclaw/contracts": "workspace:*",
-		"@euroclaw/engine-core": "workspace:*",
 		"@euroclaw/engine-sql": "workspace:*",
 		"@euroclaw/runtime": "workspace:*",
 		"@euroclaw/storage-durable": "workspace:*",

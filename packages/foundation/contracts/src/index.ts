@@ -119,6 +119,24 @@ export {
 	effectStorageEntity,
 	effectStorageFields,
 } from "./effects";
+// ── the engine protocol: engine-neutral durable execution (impls in @euroclaw/engine-*) ──────
+export type {
+	ClawEngineFactory,
+	ClawEngineHandle,
+	ClawEngineInstance,
+	ClawRunReadModel,
+	DrainWorkInput,
+	DrainWorkResult,
+	DrainWorkStatus,
+	EngineContinueRunInput,
+	EngineRunEvent,
+	EngineRunHandle,
+	EngineRunMetadata,
+	EngineRunRecord,
+	EngineStartRunInput,
+	EngineWorkResult,
+} from "./engine";
+export { drainWork } from "./engine";
 export type {
 	EntityField,
 	EntityFieldMeta,

@@ -47,7 +47,7 @@ import type {
 	EngineRunHandle,
 	EngineRunRecord,
 	EngineStartRunInput,
-} from "@euroclaw/engine-core";
+} from "@euroclaw/contracts";
 import {
 	type RunContext,
 	type Runtime,

@@ -6,8 +6,8 @@ import type {
 	EngineContinueRunInput,
 	EngineRunHandle,
 	EngineStartRunInput,
-} from "@euroclaw/engine-core";
-import { drainWork as drainEngineWork } from "@euroclaw/engine-core";
+} from "@euroclaw/contracts";
+import { drainWork as drainEngineWork } from "@euroclaw/contracts";
 import type { Runtime } from "@euroclaw/runtime";
 import { addMs, type SqlEngineStore } from "./store";
 import type {

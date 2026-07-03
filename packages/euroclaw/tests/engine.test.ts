@@ -1,4 +1,4 @@
-import type { ClawEngineFactory } from "@euroclaw/engine-core";
+import type { ClawEngineFactory } from "@euroclaw/contracts";
 import { createSqlEngineStore, sqlEngine } from "@euroclaw/engine-sql";
 import { memoryAdapter } from "@euroclaw/storage-core";
 import { describe, expect, it } from "vitest";

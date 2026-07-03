@@ -1,9 +1,13 @@
-import type {
-	EuroclawCronFlag,
-	EuroclawPlugin,
-	JsonObject,
-} from "@euroclaw/contracts";
+/**
+ * The engine protocol — what a durable execution engine IS: the engine-neutral handle
+ * (start/continue/optional work), the factory composed by `createClaw`, the run read-model, and
+ * the bounded `drainWork` helper cron hosts pump with. Implementations live in `@euroclaw/engine-*`
+ * (engine-sql today; a managed-workflow engine implements the same verbs and omits `work`).
+ */
+
 import { configurationError } from "@euroclaw/errors";
+import type { JsonObject } from "./common";
+import type { EuroclawCronFlag, EuroclawPlugin } from "./governance/plugin";
 
 export type EngineRunHandle = {
 	id: string;

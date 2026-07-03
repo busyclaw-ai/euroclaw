@@ -45,23 +45,11 @@ importers:
         specifier: workspace:*
         version: link:../../euroclaw
 
-  packages/engines/core:
-    dependencies:
-      '@euroclaw/contracts':
-        specifier: workspace:*
-        version: link:../../foundation/contracts
-      '@euroclaw/errors':
-        specifier: workspace:*
-        version: link:../../foundation/errors
-
   packages/engines/sql:
     dependencies:
       '@euroclaw/contracts':
         specifier: workspace:*
         version: link:../../foundation/contracts
-      '@euroclaw/engine-core':
-        specifier: workspace:*
-        version: link:../core
       '@euroclaw/errors':
         specifier: workspace:*
         version: link:../../foundation/errors
@@ -83,9 +71,6 @@ importers:
       '@euroclaw/contracts':
         specifier: workspace:*
         version: link:../foundation/contracts
-      '@euroclaw/engine-core':
-        specifier: workspace:*
-        version: link:../engines/core
       '@euroclaw/engine-sql':
         specifier: workspace:*
         version: link:../engines/sql
