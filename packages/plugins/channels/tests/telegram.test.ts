@@ -201,6 +201,26 @@ describe("telegram channel", () => {
 		);
 	});
 
+	it("never serves a connection with the app bot's token, even under a colliding key", async () => {
+		const api = fakeApi();
+		// the transport carries a code token (allowed as a fallback config) — the adversarial case
+		const channel = telegram({ fetch: api.fetch, token: "app-token" });
+		await channel.send({
+			message: { externalConversationId: "9", text: "reply" },
+			endpoint: {
+				provider: "telegram",
+				// a connection registered as "default" arrives under the namespaced binding key, so it can
+				// never satisfy the code-key comparison — the row credential wins
+				endpointKey: "connections/default",
+				mode: "webhook",
+				secret: "row-token",
+			},
+		});
+		expect(api.calls[0]?.url).toBe(
+			"https://api.telegram.org/botrow-token/sendMessage",
+		);
+	});
+
 	it("errors clearly on an endpoint with neither a code token nor a stored secret", async () => {
 		const channel = telegram({ token: "app-token", fetch: fakeApi().fetch });
 		// a key the code token doesn't cover, and no row credential to fall back on

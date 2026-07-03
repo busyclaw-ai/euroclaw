@@ -7,7 +7,7 @@ import { createClaw, getEuroclawTables } from "euroclaw";
 import { describe, expect, it, vi } from "vitest";
 import { channelConnections } from "../src/connections/index";
 import { type Channel, channels } from "../src/index";
-import { telegram } from "../src/telegram/index";
+import { telegram, telegramWebhookSecret } from "../src/telegram/index";
 
 type V2Model = Parameters<typeof wrapLanguageModel>[0]["model"];
 
@@ -89,6 +89,99 @@ describe("channels ↔ euroclaw integration", () => {
 				endpointKey: "acme-bot",
 			}),
 		).toMatchObject({ id: created.id });
+	});
+
+	it("keeps an app bot and a same-named connection in disjoint binding spaces", async () => {
+		// The adversarial shape the connections/ namespace exists for: same provider, same human name,
+		// same external chat id — arriving through BOTH ingresses of one real assembled claw.
+		const apiCalls: string[] = [];
+		const fakeFetch = async (url: string) => {
+			apiCalls.push(url);
+			return { ok: true, json: async () => ({ ok: true, result: {} }) };
+		};
+		const db = memoryAdapter();
+		const claw = createClaw({
+			database: db,
+			model: textModel("done"),
+			redactor: createStoredRedactor({
+				detector: noopDetector,
+				mappings: createPiiMappingStore(db),
+			}),
+			plugins: [
+				channels([
+					telegram({ fetch: fakeFetch, name: "sales", token: "app-token" }),
+				]),
+				channelConnections([telegram({ fetch: fakeFetch })]),
+			],
+		});
+		await claw.api.channels.connections.register({
+			provider: "telegram",
+			endpointKey: "sales",
+			mode: "webhook",
+			secret: "row-token",
+			webhookSecret: "hook",
+		});
+
+		const plugins = claw.$context.plugins ?? [];
+		const namedRoute = plugins
+			.flatMap((plugin) => plugin.routes ?? [])
+			.find((route) => route.path === "/channels/:provider/webhook/:name");
+		const connectionRoute = plugins
+			.flatMap((plugin) => plugin.routes ?? [])
+			.find((route) =>
+				route.path.startsWith("/channels/:provider/connections/"),
+			);
+		if (!namedRoute || !connectionRoute)
+			throw new Error("expected both webhook routes");
+
+		const update = JSON.stringify({
+			update_id: 1,
+			message: { message_id: 2, text: "hi", chat: { id: 777 } },
+		});
+		const request = (secret: string) => ({
+			method: "POST",
+			url: "https://host/webhook",
+			headers: {
+				get: (name: string) =>
+					name === "x-telegram-bot-api-secret-token" ? secret : null,
+			},
+			json: async () => JSON.parse(update) as unknown,
+			text: async () => update,
+		});
+
+		const viaApp = await namedRoute.handler({
+			claw,
+			params: { name: "sales", provider: "telegram" },
+			request: request(telegramWebhookSecret("app-token")),
+		});
+		const viaConnection = await connectionRoute.handler({
+			claw,
+			params: { endpointKey: "sales", provider: "telegram" },
+			request: request("hook"),
+		});
+		expect(viaApp.status).toBe(200);
+		expect(viaConnection.status).toBe(200);
+
+		// two bindings, two claws — the same chat id never merged across the two ingresses
+		const bindings = claw.$context.clawsStore?.conversationBindings;
+		if (!bindings) throw new Error("expected the bindings store");
+		const appBinding = await bindings.getByExternal({
+			provider: "telegram",
+			endpointKey: "sales",
+			externalConversationId: "777",
+		});
+		const connectionBinding = await bindings.getByExternal({
+			provider: "telegram",
+			endpointKey: "connections/sales",
+			externalConversationId: "777",
+		});
+		expect(appBinding).toBeTruthy();
+		expect(connectionBinding).toBeTruthy();
+		expect(appBinding?.clawId).not.toBe(connectionBinding?.clawId);
+
+		// and each ingress replied with ITS OWN credential — no token bleed either way
+		expect(apiCalls.some((url) => url.includes("/botapp-token/"))).toBe(true);
+		expect(apiCalls.some((url) => url.includes("/botrow-token/"))).toBe(true);
 	});
 
 	it("runtime-rejects duplicate unnamed bots (the compile-time fold's mirror)", () => {
