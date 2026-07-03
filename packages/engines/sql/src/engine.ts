@@ -1,4 +1,3 @@
-import type { EuroclawPlugin } from "@euroclaw/contracts";
 import type {
 	ClawEngineFactory,
 	ClawEngineHandle,
@@ -6,6 +5,7 @@ import type {
 	EngineContinueRunInput,
 	EngineRunHandle,
 	EngineStartRunInput,
+	EuroclawPlugin,
 } from "@euroclaw/contracts";
 import { drainWork as drainEngineWork } from "@euroclaw/contracts";
 import type { Runtime } from "@euroclaw/runtime";
