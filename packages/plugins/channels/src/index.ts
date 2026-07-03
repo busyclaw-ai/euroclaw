@@ -25,7 +25,6 @@ export { type ClawLike, requireClaw } from "./core/claw";
 export type {
 	Channel,
 	ChannelEndpointMode,
-	CodeEndpoint,
 	EndpointContext,
 	EndpointEvent,
 	InboundMessage,
@@ -33,7 +32,10 @@ export type {
 	OutboundMessage,
 	PersistEndpointEvent,
 } from "./core/contracts";
-export { channelEndpointModeValues } from "./core/contracts";
+export {
+	APP_ENDPOINT_KEY,
+	channelEndpointModeValues,
+} from "./core/contracts";
 export {
 	type ChannelDispatchResult,
 	dispatchWebhook,

@@ -6,11 +6,12 @@ import {
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { type } from "arktype";
-import type {
-	Channel,
-	ChannelEndpointMode,
-	EndpointContext,
-	InboundMessage,
+import {
+	APP_ENDPOINT_KEY,
+	type Channel,
+	type ChannelEndpointMode,
+	type EndpointContext,
+	type InboundMessage,
 } from "../core/contracts";
 import {
 	createTelegramClient,
@@ -52,8 +53,6 @@ export type TelegramConfig = {
 	token?: string;
 	/** Transport for the app's own bot; defaults to webhook (poll is opt-in and contributes the cron). */
 	mode?: ChannelEndpointMode;
-	/** Code endpoint key; defaults to "default". Distinguishes multiple bots of the same provider. */
-	endpointKey?: string;
 	/** Bot API base URL for a self-hosted server; defaults to https://api.telegram.org. */
 	apiBaseUrl?: string;
 	/** Fetch implementation override (proxies, tests); defaults to global fetch. */
@@ -145,14 +144,13 @@ export function telegram(
 	config: TelegramConfig = {},
 ): Channel & { readonly $poll: boolean } {
 	const mode: ChannelEndpointMode = config.mode ?? "webhook";
-	const endpointKey = config.endpointKey ?? "default";
 	const codeToken = config.token ?? envToken();
 
-	// The token for one endpoint: the code token for the declared key, otherwise the one stored on
+	// The token for one endpoint: the code token for the app's own bot, otherwise the one stored on
 	// the connection row (the sso model — read the credential back). Missing everywhere is a setup
 	// gap the caller surfaces.
 	const tokenFor = (endpoint: EndpointContext): string | undefined =>
-		codeToken && endpoint.endpointKey === endpointKey
+		codeToken && endpoint.endpointKey === APP_ENDPOINT_KEY
 			? codeToken
 			: endpoint.secret;
 
@@ -175,7 +173,7 @@ export function telegram(
 	return {
 		provider: "telegram",
 		supports: { webhook: true, poll: true },
-		codeEndpoints: [{ key: endpointKey, mode }],
+		mode,
 		// Phantom-ish marker read by channels() at the type level; its runtime value tracks the mode.
 		$poll: mode === "poll",
 
@@ -184,7 +182,6 @@ export function telegram(
 			// never send, poll, or verify — refuse at startup instead of erroring on first traffic.
 			if (!codeToken) {
 				throw configurationError("telegram bot has no token", {
-					endpointKey,
 					reason:
 						"pass telegram({ token }) or set the TELEGRAM_BOT_TOKEN environment variable",
 				});

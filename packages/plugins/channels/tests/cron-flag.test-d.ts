@@ -14,7 +14,7 @@ declare const model: RuntimeConfig["model"];
 const hooksOnly = {
 	provider: "hooks",
 	supports: { webhook: true, poll: false },
-	codeEndpoints: [{ key: "default", mode: "webhook" }],
+	mode: "webhook",
 	parseInbound: () => [],
 	send: async () => {},
 	$poll: false,

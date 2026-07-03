@@ -8,7 +8,11 @@ import {
 	type EuroclawRouteContext,
 } from "@euroclaw/contracts";
 import { requireClaw } from "../core/claw";
-import type { Channel, EndpointContext } from "../core/contracts";
+import {
+	APP_ENDPOINT_KEY,
+	type Channel,
+	type EndpointContext,
+} from "../core/contracts";
 import { dispatchWebhook, pollEndpoint } from "../core/dispatch";
 import { channelsModels } from "./schema";
 import {
@@ -44,9 +48,9 @@ type AnyPoll<List extends readonly PollAware[]> = [
 type ChannelsCronFlag<List extends readonly PollAware[]> =
 	AnyPoll<List> extends true ? "has-cron" : "no-cron";
 
-// The one webhook mount for the app's own bots — dispatch is by `:provider`, then the channel's
-// identify() (header/payload) picks the code endpoint, defaulting to "default". User-registered bots
-// are the channelConnections plugin's route, not this one.
+// The one webhook mount for the app's own bots — dispatch is by `:provider` alone (one bot per
+// provider; the provider's verify authenticates it). User-registered bots are the channelConnections
+// plugin's route, not this one.
 const WEBHOOK_PATH = "/channels/:provider/webhook";
 
 /** Narrow the resolved adapter the assembly passes through the configure context's index signature. */
@@ -57,10 +61,9 @@ export function contextAdapter(context: unknown): Adapter | undefined {
 	return value as Adapter;
 }
 
-/** One channel per provider (webhook dispatch is by provider) and unique code endpoint keys. */
+/** One channel per provider — webhook dispatch is by provider alone. */
 export function assertUniqueChannels(channels: readonly Channel[]): void {
 	const providers = new Set<string>();
-	const endpoints = new Set<string>();
 	for (const channel of channels) {
 		if (providers.has(channel.provider)) {
 			throw configurationError("duplicate channel provider", {
@@ -70,16 +73,6 @@ export function assertUniqueChannels(channels: readonly Channel[]): void {
 			});
 		}
 		providers.add(channel.provider);
-		for (const endpoint of channel.codeEndpoints) {
-			const key = `${channel.provider}:${endpoint.key}`;
-			if (endpoints.has(key)) {
-				throw configurationError("duplicate channel endpoint", {
-					provider: channel.provider,
-					endpointKey: endpoint.key,
-				});
-			}
-			endpoints.add(key);
-		}
 	}
 }
 
@@ -115,12 +108,8 @@ function buildChannelsPlugin(
 		list.map((channel) => [channel.provider, channel]),
 	);
 	const hasWebhook = list.some((channel) => channel.supports.webhook);
-	const pollTargets = list.flatMap((channel) =>
-		channel.supports.poll
-			? channel.codeEndpoints
-					.filter((endpoint) => endpoint.mode === "poll")
-					.map((endpoint) => ({ channel, endpoint }))
-			: [],
+	const pollTargets = list.filter(
+		(channel) => channel.supports.poll && channel.mode === "poll",
 	);
 
 	const requireStore = (): ChannelEndpointStateStore => {
@@ -146,24 +135,33 @@ function buildChannelsPlugin(
 		);
 	};
 
-	// A code endpoint's normalized view: no secrets (the client lives on the channel), no bind
-	// defaults (conversations create bare personal claws — placement is the host's logic through the
-	// public bindConversation api), cursor from the persisted state row.
-	const contextFor = async (
-		channel: Channel,
-		endpoint: { key: string; mode: "webhook" | "poll" },
-	): Promise<EndpointContext> => {
+	// The app bot's normalized view: no secrets (the client lives on the channel), no bind defaults
+	// (conversations create bare personal claws — placement is the host's logic through the public
+	// bindConversation api), cursor from the state row under the reserved app-bot key.
+	const contextFor = async (channel: Channel): Promise<EndpointContext> => {
 		const state = await requireStore().get({
 			provider: channel.provider,
-			endpointKey: endpoint.key,
+			endpointKey: APP_ENDPOINT_KEY,
 		});
 		return {
 			provider: channel.provider,
-			endpointKey: endpoint.key,
-			mode: endpoint.mode,
+			endpointKey: APP_ENDPOINT_KEY,
+			mode: channel.mode,
 			cursor: state?.cursor,
 		};
 	};
+
+	const persistFor =
+		(channel: Channel) =>
+		(event: Parameters<ChannelEndpointStateStore["record"]>[1]) =>
+			requireStore().record(
+				{
+					provider: channel.provider,
+					endpointKey: APP_ENDPOINT_KEY,
+					mode: channel.mode,
+				},
+				event,
+			);
 
 	const webhookRoute: EuroclawRoute = {
 		id: "channels:webhook",
@@ -175,30 +173,12 @@ function buildChannelsPlugin(
 				return { status: 404, body: { ok: false, error: "unknown provider" } };
 			}
 			const rawBody = await request.text();
-			const inbound = { headers: request.headers, rawBody };
-			// identify() may pick the code endpoint (fan-in providers); default is "default".
-			const endpointKey = channel.identify?.(inbound) ?? "default";
-			const code = channel.codeEndpoints.find(
-				(endpoint) => endpoint.key === endpointKey,
-			);
-			if (!code) {
-				return { status: 404, body: { ok: false, error: "unknown endpoint" } };
-			}
-			const endpoint = await contextFor(channel, code);
 			const result = await dispatchWebhook({
 				claw: requireClaw(claw),
 				channel,
-				endpoint,
-				request: inbound,
-				persist: (event) =>
-					requireStore().record(
-						{
-							provider: channel.provider,
-							endpointKey: code.key,
-							mode: code.mode,
-						},
-						event,
-					),
+				endpoint: await contextFor(channel),
+				request: { headers: request.headers, rawBody },
+				persist: persistFor(channel),
 			});
 			return { status: result.status, body: result.body };
 		},
@@ -208,22 +188,13 @@ function buildChannelsPlugin(
 		id: "channels:poll",
 		handler: async ({ claw, limit }: { claw: unknown; limit?: number }) => {
 			let processed = 0;
-			for (const target of pollTargets) {
-				const endpoint = await contextFor(target.channel, target.endpoint);
+			for (const channel of pollTargets) {
 				const result = await pollEndpoint({
 					claw: requireClaw(claw),
-					channel: target.channel,
-					endpoint,
+					channel,
+					endpoint: await contextFor(channel),
 					limit,
-					persist: (event) =>
-						requireStore().record(
-							{
-								provider: target.channel.provider,
-								endpointKey: target.endpoint.key,
-								mode: target.endpoint.mode,
-							},
-							event,
-						),
+					persist: persistFor(channel),
 				});
 				processed += result.processed;
 			}

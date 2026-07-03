@@ -14,7 +14,11 @@ import {
 import { type } from "arktype";
 import { assertUniqueChannels, contextAdapter } from "../channels/plugin";
 import { requireClaw } from "../core/claw";
-import type { Channel, EndpointContext } from "../core/contracts";
+import {
+	APP_ENDPOINT_KEY,
+	type Channel,
+	type EndpointContext,
+} from "../core/contracts";
 import { dispatchWebhook, pollEndpoint } from "../core/dispatch";
 import { channelConnectionsModels } from "./schema";
 import {
@@ -189,6 +193,15 @@ function buildPlugin(
 			throw configurationError("unknown channel provider", {
 				provider: input.provider,
 				reason: "pass this provider's channel to channelConnections([...])",
+			});
+		}
+		if (input.endpointKey === APP_ENDPOINT_KEY) {
+			// The app's own bot binds under this key — a connection sharing it would land in the same
+			// (provider, endpointKey) binding space and cross-wire conversations.
+			throw configurationError("reserved connection key", {
+				endpointKey: input.endpointKey,
+				provider: input.provider,
+				reason: `"${APP_ENDPOINT_KEY}" is the app bot's endpoint key — pick another`,
 			});
 		}
 		if (input.mode === "poll" && !pollEnabled) {

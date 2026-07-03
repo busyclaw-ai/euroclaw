@@ -92,9 +92,9 @@ describe("channels ↔ euroclaw integration", () => {
 	});
 
 	it("rejects two channels for the same provider — webhook dispatch is by provider", () => {
-		expect(() =>
-			channels([appBot(), telegram({ endpointKey: "other" })]),
-		).toThrow(/duplicate channel provider/);
+		expect(() => channels([appBot(), telegram()])).toThrow(
+			/duplicate channel provider/,
+		);
 	});
 
 	it("fails at startup when an app bot has no token anywhere", () => {

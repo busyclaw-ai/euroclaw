@@ -77,11 +77,13 @@ export type EndpointEvent =
 
 export type PersistEndpointEvent = (event: EndpointEvent) => Promise<unknown>;
 
-/** An endpoint a channel declares in code — the app's own bot: a (key, mode) pair. */
-export type CodeEndpoint = {
-	key: string;
-	mode: ChannelEndpointMode;
-};
+/**
+ * The endpoint key of the app's own bot — the channels plugin runs ONE bot per provider (webhook
+ * dispatch is by `:provider` alone), so its state rows and conversation bindings all live under this
+ * constant. channelConnections refuses to register a connection with this key: it would share the
+ * app bot's binding space and cross-wire conversations.
+ */
+export const APP_ENDPOINT_KEY = "default";
 
 /**
  * The behavioral contract every channel implements — the OAuthProvider analog, but bidirectional
@@ -92,16 +94,14 @@ export type CodeEndpoint = {
 export interface Channel {
 	readonly provider: string;
 	readonly supports: { readonly webhook: boolean; readonly poll: boolean };
-	/** Endpoints declared in code — the app's own bots; their clients live on the channel. */
-	readonly codeEndpoints: readonly CodeEndpoint[];
+	/** The app bot's transport (the channels plugin runs one bot per provider). */
+	readonly mode: ChannelEndpointMode;
 	/**
 	 * Assert the code-declared configuration is usable (credentials present after env fallbacks).
 	 * channels() calls this at construction so a dead app bot fails at startup, not on first traffic;
 	 * channelConnections never calls it — a bare transport's credentials live on the rows.
 	 */
 	validate?: () => void;
-	/** Extract the endpoint key from a request (default: the route key). Fan-in overrides. */
-	identify?: (request: InboundRequest) => string | undefined;
 	/**
 	 * Authenticate an inbound request against the endpoint BEFORE its body is trusted. Prefer failing
 	 * closed — an unverified webhook relays attacker input straight into a model run (telegram checks

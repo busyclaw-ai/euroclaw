@@ -41,7 +41,7 @@ function fakeChannel(overrides: Partial<Channel> = {}): Channel {
 	return {
 		provider: "fake",
 		supports: { webhook: true, poll: true },
-		codeEndpoints: [],
+		mode: "webhook",
 		parseInbound: ({ request }) => [
 			{ externalConversationId: "chat-1", text: request.rawBody },
 		],
@@ -149,6 +149,22 @@ describe("channelConnections plugin", () => {
 				mode: "webhook",
 			}),
 		).rejects.toThrow(/unknown channel provider/);
+	});
+
+	it("rejects the reserved app-bot key — it would share the app bot's binding space", async () => {
+		const plugin = configured(channelConnections([fakeChannel()]));
+		const api = plugin.api?.({}) as {
+			channels: {
+				connections: { register: (input: unknown) => Promise<unknown> };
+			};
+		};
+		await expect(
+			api.channels.connections.register({
+				provider: "fake",
+				endpointKey: "default",
+				mode: "webhook",
+			}),
+		).rejects.toThrow(/reserved connection key/);
 	});
 
 	it("rejects poll-mode registration unless poll is enabled", async () => {

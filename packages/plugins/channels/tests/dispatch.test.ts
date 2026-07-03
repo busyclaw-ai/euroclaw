@@ -36,7 +36,7 @@ function fakeChannel(overrides: Partial<Channel> = {}): Channel {
 	return {
 		provider: "fake",
 		supports: { webhook: true, poll: true },
-		codeEndpoints: [{ key: "default", mode: "webhook" }],
+		mode: "webhook",
 		parseInbound: ({ request }) => [
 			{ externalConversationId: "chat-1", text: request.rawBody },
 		],
