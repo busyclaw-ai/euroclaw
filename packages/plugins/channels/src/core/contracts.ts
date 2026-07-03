@@ -78,10 +78,12 @@ export type EndpointEvent =
 export type PersistEndpointEvent = (event: EndpointEvent) => Promise<unknown>;
 
 /**
- * The endpoint key of the app's own bot — the channels plugin runs ONE bot per provider (webhook
- * dispatch is by `:provider` alone), so its state rows and conversation bindings all live under this
- * constant. channelConnections refuses to register a connection with this key: it would share the
- * app bot's binding space and cross-wire conversations.
+ * The endpoint key of an UNNAMED app bot. A provider's first bot needs no name and lives under this
+ * constant (webhook: `/channels/:provider/webhook`); additional bots of the same provider carry a
+ * `name`, which becomes their endpoint key and their path segment
+ * (`/channels/:provider/webhook/:name`) — the genericOAuth model, where the discriminator is in the
+ * callback URL. channelConnections refuses to register a connection with this key: it would share
+ * the unnamed app bot's binding space and cross-wire conversations.
  */
 export const APP_ENDPOINT_KEY = "default";
 
@@ -93,8 +95,14 @@ export const APP_ENDPOINT_KEY = "default";
  */
 export interface Channel {
 	readonly provider: string;
+	/**
+	 * Distinguishes multiple app bots of one provider — it becomes the bot's endpoint key and its
+	 * webhook path segment. Optional for a provider's only bot; channels() requires distinct
+	 * (provider, name) pairs at compile time and at runtime.
+	 */
+	readonly name?: string;
 	readonly supports: { readonly webhook: boolean; readonly poll: boolean };
-	/** The app bot's transport (the channels plugin runs one bot per provider). */
+	/** The app bot's transport. */
 	readonly mode: ChannelEndpointMode;
 	/**
 	 * Assert the code-declared configuration is usable (credentials present after env fallbacks).

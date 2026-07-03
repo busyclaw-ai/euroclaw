@@ -53,6 +53,12 @@ export type TelegramConfig = {
 	token?: string;
 	/** Transport for the app's own bot; defaults to webhook (poll is opt-in and contributes the cron). */
 	mode?: ChannelEndpointMode;
+	/**
+	 * Distinguishes multiple app bots — becomes the bot's endpoint key and webhook path segment
+	 * (/channels/telegram/webhook/:name). A provider's only bot needs none; channels() demands
+	 * distinct names when two telegram bots are registered (compile-time + runtime).
+	 */
+	name?: string;
 	/** Bot API base URL for a self-hosted server; defaults to https://api.telegram.org. */
 	apiBaseUrl?: string;
 	/** Fetch implementation override (proxies, tests); defaults to global fetch. */
@@ -128,6 +134,11 @@ function replyMessageId(replyContext: unknown): number | undefined {
 /** Compile-time poll flag: a channel contributes cron only when it declares a poll endpoint. */
 type TelegramPoll<Config> = Config extends { mode: "poll" } ? true : false;
 
+/** The literal bot name (feeds channels()'s distinct-key fold), or undefined for the unnamed bot. */
+type TelegramName<Config> = Config extends { name: infer N extends string }
+	? N
+	: undefined;
+
 /**
  * The Telegram channel. With a token it is the app's own bot (channels plugin) — webhook
  * verification derives from the token, so nothing else is required. Bare `telegram()` is the pure
@@ -136,23 +147,30 @@ type TelegramPoll<Config> = Config extends { mode: "poll" } ? true : false;
  * `channels()` derive its cron requirement at compile time; the overloads keep it a literal without
  * a cast.
  */
-export function telegram(): Channel & { readonly $poll: false };
+export function telegram(): Channel & {
+	readonly provider: "telegram";
+	readonly name: undefined;
+	readonly $poll: false;
+};
 export function telegram<const Config extends TelegramConfig>(
 	config: Config,
-): Channel & { readonly $poll: TelegramPoll<Config> };
+): Channel & {
+	readonly provider: "telegram";
+	readonly name: TelegramName<Config>;
+	readonly $poll: TelegramPoll<Config>;
+};
 export function telegram(
 	config: TelegramConfig = {},
 ): Channel & { readonly $poll: boolean } {
 	const mode: ChannelEndpointMode = config.mode ?? "webhook";
+	const key = config.name ?? APP_ENDPOINT_KEY;
 	const codeToken = config.token ?? envToken();
 
-	// The token for one endpoint: the code token for the app's own bot, otherwise the one stored on
+	// The token for one endpoint: the code token for THIS bot's key, otherwise the one stored on
 	// the connection row (the sso model — read the credential back). Missing everywhere is a setup
 	// gap the caller surfaces.
 	const tokenFor = (endpoint: EndpointContext): string | undefined =>
-		codeToken && endpoint.endpointKey === APP_ENDPOINT_KEY
-			? codeToken
-			: endpoint.secret;
+		codeToken && endpoint.endpointKey === key ? codeToken : endpoint.secret;
 
 	const clientFor = (endpoint: EndpointContext): TelegramClient => {
 		const token = tokenFor(endpoint);
@@ -172,6 +190,7 @@ export function telegram(
 
 	return {
 		provider: "telegram",
+		name: config.name,
 		supports: { webhook: true, poll: true },
 		mode,
 		// Phantom-ish marker read by channels() at the type level; its runtime value tracks the mode.
@@ -182,6 +201,7 @@ export function telegram(
 			// never send, poll, or verify — refuse at startup instead of erroring on first traffic.
 			if (!codeToken) {
 				throw configurationError("telegram bot has no token", {
+					...(config.name !== undefined ? { name: config.name } : {}),
 					reason:
 						"pass telegram({ token }) or set the TELEGRAM_BOT_TOKEN environment variable",
 				});

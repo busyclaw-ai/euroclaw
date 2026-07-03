@@ -12,7 +12,7 @@ import {
 	validationError,
 } from "@euroclaw/contracts";
 import { type } from "arktype";
-import { assertUniqueChannels, contextAdapter } from "../channels/plugin";
+import { assertUniqueProviders, contextAdapter } from "../channels/plugin";
 import { requireClaw } from "../core/claw";
 import {
 	APP_ENDPOINT_KEY,
@@ -106,7 +106,7 @@ function buildPlugin(
 	options: ChannelConnectionsOptions,
 	store: ChannelConnectionsStore | undefined,
 ): ChannelConnectionsPlugin {
-	assertUniqueChannels(providers);
+	assertUniqueProviders(providers);
 	const now = options.now ?? (() => new Date().toISOString());
 	const pollEnabled = options.poll === true;
 	const byProvider = new Map(

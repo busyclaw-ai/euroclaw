@@ -80,3 +80,20 @@ describe("channelConnections cron-handler requirement", () => {
 		});
 	});
 });
+
+describe("channel naming requirement", () => {
+	test("two bots of one provider need distinct names, statically", () => {
+		// @ts-expect-error — duplicate (provider, name) key: both are telegram:default
+		channels([telegram({ token: "a" }), telegram({ token: "b" })]);
+		// a named second bot compiles
+		channels([
+			telegram({ token: "a" }),
+			telegram({ token: "b", name: "sales" }),
+		]);
+		// @ts-expect-error — two bots under the same name collide too
+		channels([
+			telegram({ token: "a", name: "sales" }),
+			telegram({ token: "b", name: "sales" }),
+		]);
+	});
+});

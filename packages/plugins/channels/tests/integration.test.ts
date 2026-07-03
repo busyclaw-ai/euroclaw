@@ -6,7 +6,7 @@ import type { wrapLanguageModel } from "ai";
 import { createClaw, getEuroclawTables } from "euroclaw";
 import { describe, expect, it, vi } from "vitest";
 import { channelConnections } from "../src/connections/index";
-import { channels } from "../src/index";
+import { type Channel, channels } from "../src/index";
 import { telegram } from "../src/telegram/index";
 
 type V2Model = Parameters<typeof wrapLanguageModel>[0]["model"];
@@ -91,10 +91,10 @@ describe("channels ↔ euroclaw integration", () => {
 		).toMatchObject({ id: created.id });
 	});
 
-	it("rejects two channels for the same provider — webhook dispatch is by provider", () => {
-		expect(() => channels([appBot(), telegram()])).toThrow(
-			/duplicate channel provider/,
-		);
+	it("runtime-rejects duplicate unnamed bots (the compile-time fold's mirror)", () => {
+		// widened to Channel[] so the literal-key fold can't see the duplicate — runtime must
+		const dupes: Channel[] = [appBot(), telegram()];
+		expect(() => channels(dupes)).toThrow(/duplicate channel/);
 	});
 
 	it("fails at startup when an app bot has no token anywhere", () => {

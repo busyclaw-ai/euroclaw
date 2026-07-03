@@ -48,10 +48,58 @@ type AnyPoll<List extends readonly PollAware[]> = [
 type ChannelsCronFlag<List extends readonly PollAware[]> =
 	AnyPoll<List> extends true ? "has-cron" : "no-cron";
 
-// The one webhook mount for the app's own bots — dispatch is by `:provider` alone (one bot per
-// provider; the provider's verify authenticates it). User-registered bots are the channelConnections
-// plugin's route, not this one.
+/**
+ * The compile-time channel key — provider(:name), literals only. A wide `string` provider/name
+ * (hand-rolled fixtures) yields `never` and falls back to the runtime check, so the fold can't
+ * false-positive on non-literal types.
+ */
+type ChannelKeyOf<C> = C extends { readonly provider: infer P extends string }
+	? string extends P
+		? never
+		: C extends { readonly name: infer N extends string }
+			? string extends N
+				? never
+				: `${P}:${N}`
+			: `${P}:${typeof APP_ENDPOINT_KEY}`
+	: never;
+
+type ChannelKeys<List extends readonly unknown[]> = List extends readonly [
+	infer Head,
+	...infer Tail,
+]
+	? [ChannelKeyOf<Head>, ...ChannelKeys<Tail>]
+	: [];
+
+type HasDuplicateKey<
+	Items extends readonly unknown[],
+	Seen = never,
+> = Items extends readonly [infer Head, ...infer Tail]
+	? [Head] extends [never]
+		? HasDuplicateKey<Tail, Seen>
+		: [Head] extends [Seen]
+			? true
+			: HasDuplicateKey<Tail, Seen | Head>
+	: false;
+
+type DuplicateChannelError = {
+	readonly "ERROR: two channels share a provider without distinct names": never;
+	readonly "FIX: name the extra bots — telegram({ name: 'sales' })": never;
+};
+
+/** Two bots of one provider must carry distinct names (the genericOAuth providerId model). */
+type RequireDistinctChannels<List extends readonly unknown[]> =
+	HasDuplicateKey<ChannelKeys<List>> extends true
+		? DuplicateChannelError
+		: unknown;
+
+// The webhook mounts for the app's own bots: a provider's unnamed bot answers on the bare path,
+// named bots each get their own segment — the genericOAuth `/oauth2/callback/:providerId` model.
+// User-registered bots are the channelConnections plugin's route, not these.
 const WEBHOOK_PATH = "/channels/:provider/webhook";
+const NAMED_WEBHOOK_PATH = "/channels/:provider/webhook/:name";
+
+/** A bot's endpoint key: its name, or the unnamed-bot constant. */
+const keyOf = (channel: Channel): string => channel.name ?? APP_ENDPOINT_KEY;
 
 /** Narrow the resolved adapter the assembly passes through the configure context's index signature. */
 export function contextAdapter(context: unknown): Adapter | undefined {
@@ -61,18 +109,34 @@ export function contextAdapter(context: unknown): Adapter | undefined {
 	return value as Adapter;
 }
 
-/** One channel per provider — webhook dispatch is by provider alone. */
-export function assertUniqueChannels(channels: readonly Channel[]): void {
+/** One transport per provider — channelConnections resolves everything else from rows. */
+export function assertUniqueProviders(channels: readonly Channel[]): void {
 	const providers = new Set<string>();
 	for (const channel of channels) {
 		if (providers.has(channel.provider)) {
 			throw configurationError("duplicate channel provider", {
 				provider: channel.provider,
-				reason:
-					"webhook dispatch is by provider — register one channel per provider",
+				reason: "pass one transport per provider",
 			});
 		}
 		providers.add(channel.provider);
+	}
+}
+
+/** Distinct (provider, name) per app bot — the runtime mirror of RequireDistinctChannels. */
+function assertUniqueChannelKeys(channels: readonly Channel[]): void {
+	const keys = new Set<string>();
+	for (const channel of channels) {
+		const key = `${channel.provider}:${keyOf(channel)}`;
+		if (keys.has(key)) {
+			throw configurationError("duplicate channel", {
+				name: keyOf(channel),
+				provider: channel.provider,
+				reason:
+					"two bots of one provider need distinct names — telegram({ name: 'sales' })",
+			});
+		}
+		keys.add(key);
 	}
 }
 
@@ -83,7 +147,7 @@ export function assertUniqueChannels(channels: readonly Channel[]): void {
  * user-registered bots see channelConnections (the SSO analog).
  */
 export function channels<const List extends readonly PollAware[]>(
-	list: List,
+	list: List & RequireDistinctChannels<List>,
 	options: ChannelsPluginOptions = {},
 ): ChannelsPlugin<ChannelsCronFlag<List>> {
 	// buildChannelsPlugin sets $HasCron at runtime from the same poll-endpoint check AnyPoll folds at
@@ -98,16 +162,17 @@ function buildChannelsPlugin(
 	options: ChannelsPluginOptions,
 	store: ChannelEndpointStateStore | undefined,
 ): ChannelsPlugin {
-	assertUniqueChannels(list);
+	assertUniqueChannelKeys(list);
 	// Every channel here is an app bot — fail at startup, not on first traffic, if one is unusable
 	// (e.g. no token in config and none in the environment).
 	for (const channel of list) channel.validate?.();
 	const now = options.now ?? (() => new Date().toISOString());
-	// Safe to key by provider: assertUniqueChannels guarantees one channel per provider.
-	const byProvider = new Map(
-		list.map((channel) => [channel.provider, channel]),
+	// Safe to key by (provider, name): assertUniqueChannelKeys guarantees distinct keys.
+	const byKey = new Map(
+		list.map((channel) => [`${channel.provider}:${keyOf(channel)}`, channel]),
 	);
 	const hasWebhook = list.some((channel) => channel.supports.webhook);
+	const hasNamed = list.some((channel) => channel.name !== undefined);
 	const pollTargets = list.filter(
 		(channel) => channel.supports.poll && channel.mode === "poll",
 	);
@@ -135,17 +200,17 @@ function buildChannelsPlugin(
 		);
 	};
 
-	// The app bot's normalized view: no secrets (the client lives on the channel), no bind defaults
+	// A bot's normalized view: no secrets (the client lives on the channel), no bind defaults
 	// (conversations create bare personal claws — placement is the host's logic through the public
-	// bindConversation api), cursor from the state row under the reserved app-bot key.
+	// bindConversation api), cursor from the state row under the bot's key.
 	const contextFor = async (channel: Channel): Promise<EndpointContext> => {
 		const state = await requireStore().get({
 			provider: channel.provider,
-			endpointKey: APP_ENDPOINT_KEY,
+			endpointKey: keyOf(channel),
 		});
 		return {
 			provider: channel.provider,
-			endpointKey: APP_ENDPOINT_KEY,
+			endpointKey: keyOf(channel),
 			mode: channel.mode,
 			cursor: state?.cursor,
 		};
@@ -157,20 +222,18 @@ function buildChannelsPlugin(
 			requireStore().record(
 				{
 					provider: channel.provider,
-					endpointKey: APP_ENDPOINT_KEY,
+					endpointKey: keyOf(channel),
 					mode: channel.mode,
 				},
 				event,
 			);
 
-	const webhookRoute: EuroclawRoute = {
-		id: "channels:webhook",
-		method: "POST",
-		path: WEBHOOK_PATH,
-		handler: async ({ claw, params, request }: EuroclawRouteContext) => {
-			const channel = byProvider.get(params.provider ?? "");
+	const webhookHandler =
+		(keyFrom: (params: Record<string, string>) => string) =>
+		async ({ claw, params, request }: EuroclawRouteContext) => {
+			const channel = byKey.get(`${params.provider ?? ""}:${keyFrom(params)}`);
 			if (!channel) {
-				return { status: 404, body: { ok: false, error: "unknown provider" } };
+				return { status: 404, body: { ok: false, error: "unknown channel" } };
 			}
 			const rawBody = await request.text();
 			const result = await dispatchWebhook({
@@ -181,8 +244,27 @@ function buildChannelsPlugin(
 				persist: persistFor(channel),
 			});
 			return { status: result.status, body: result.body };
+		};
+
+	const webhookRoutes: EuroclawRoute[] = [
+		{
+			id: "channels:webhook",
+			method: "POST",
+			path: WEBHOOK_PATH,
+			handler: webhookHandler(() => APP_ENDPOINT_KEY),
 		},
-	};
+		// Mounted only when a named bot exists — each named bot answers on its own path segment.
+		...(hasNamed
+			? [
+					{
+						id: "channels:webhook:named",
+						method: "POST" as const,
+						path: NAMED_WEBHOOK_PATH,
+						handler: webhookHandler((params) => params.name ?? ""),
+					},
+				]
+			: []),
+	];
 
 	const pollTask = {
 		id: "channels:poll",
@@ -210,7 +292,7 @@ function buildChannelsPlugin(
 		$HasCron: pollTargets.length > 0 ? "has-cron" : "no-cron",
 		schema: channelsModels,
 		configure,
-		routes: hasWebhook ? [webhookRoute] : [],
+		routes: hasWebhook ? webhookRoutes : [],
 		cron: pollTargets.length > 0 ? [pollTask] : [],
 	};
 }
