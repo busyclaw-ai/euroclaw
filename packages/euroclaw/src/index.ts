@@ -1,3 +1,4 @@
+import type { ClawEngineFactory, ClawEngineHandle } from "@euroclaw/contracts";
 import {
 	type AuditSink,
 	type ClawsStore,
@@ -7,10 +8,6 @@ import {
 	type EuroclawPlugin,
 	type EuroclawPluginConfigureContext,
 	type InferPluginApi,
-} from "@euroclaw/contracts";
-import type {
-	ClawEngineFactory,
-	ClawEngineHandle,
 } from "@euroclaw/contracts";
 import {
 	createRuntime,

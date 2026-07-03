@@ -5,7 +5,9 @@ import type {
 	BindConversationInput,
 	BindConversationResult,
 	CheckpointRecord,
+	ClawEngineHandle,
 	ClawRecord,
+	ClawRunReadModel,
 	ClawsStore,
 	ConversationBindingRecord,
 	CreateCheckpointInput,
@@ -13,6 +15,11 @@ import type {
 	CreateToolCallInput,
 	CreateToolResultInput,
 	EffectStore,
+	EngineContinueRunInput,
+	EngineRunEvent,
+	EngineRunHandle,
+	EngineRunRecord,
+	EngineStartRunInput,
 	EuroclawPlugin,
 	MessageRecord,
 	ThreadRecord,
@@ -38,15 +45,6 @@ import {
 	stateError,
 	toolCallEntity,
 	validationError,
-} from "@euroclaw/contracts";
-import type {
-	ClawEngineHandle,
-	ClawRunReadModel,
-	EngineContinueRunInput,
-	EngineRunEvent,
-	EngineRunHandle,
-	EngineRunRecord,
-	EngineStartRunInput,
 } from "@euroclaw/contracts";
 import {
 	type RunContext,
