@@ -19,17 +19,18 @@ back here.
 - **License:** MIT
 - **Used in euroclaw:** portions of the type-level and plugin machinery are
   *adapted from* Better Auth's **patterns/API** (not verbatim code). Files:
-  - `packages/core/src/governance/plugin.ts` — the plugin-as-data-object shape with phantom
+  - `packages/foundation/contracts/src/governance/plugin.ts` — the plugin-as-data-object shape with phantom
     type carriers (`$Infer`, `$InferContext`, `$REASON_CODES`) and the tuple-fold that
     intersects a field across all plugins (cf. `InferPluginFieldFromTuple` /
     `InferPluginTypes`). The `UnionToIntersection` / `IsAny` helpers are ubiquitous
     community TS idioms, not Better Auth's.
-  - `packages/core/src/governance/reason-codes.ts` — the `defineReasonCodes` catalog pattern adapted
+  - `packages/foundation/contracts/src/governance/reason-codes.ts` — the `defineReasonCodes` catalog pattern adapted
     from Better Auth's `defineErrorCodes`.
-  - `packages/core/src/governance/governance.ts` — the generic-config factory shape
+  - `packages/foundation/core/src/governance.ts` — the generic-config factory shape
 	    `createGovernance<const Config>(config): Governance<Config>` and folding plugin types
 	    onto the instance (cf. `betterAuth<Options>(options)`).
-  - `packages/storage/core/src/index.ts` — the `Adapter` CRUD port (incl. the atomic
+  - `packages/foundation/contracts/src/storage.ts` (the protocol; implementations in
+    `packages/storage/core/src/`) — the `Adapter` CRUD port (incl. the atomic
     `consumeOne` single-use primitive), the `Where` shape, and the declarative table-schema
 	format, based on Better Auth's database adapter (`packages/core/src/db`, `DBAdapter`) and
     its plugin schema files (`packages/better-auth/src/plugins/*/schema.ts`). euroclaw's port is
