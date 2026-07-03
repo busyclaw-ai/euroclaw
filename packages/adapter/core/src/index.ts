@@ -478,7 +478,7 @@ export function toRequestHandler(
 		const normalizedPath = normalizePath(path);
 		const staticRoute = routeMap.get(`${method} ${normalizedPath}`);
 		const matched = staticRoute
-			? { route: staticRoute, params: {} as Record<string, string> }
+			? { route: staticRoute, params: {} }
 			: matchPatternRoutes(patternRoutes, method, normalizedPath);
 		if (!matched) return errorResponse("not found", 404);
 		try {

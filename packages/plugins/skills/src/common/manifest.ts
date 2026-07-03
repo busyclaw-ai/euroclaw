@@ -25,7 +25,7 @@ function assertNoReservedTool(values: readonly string[] | undefined): void {
 export function assertSkillManifest(input: unknown): SkillManifest {
 	// The schema enforces every mechanical constraint (id format, lengths, dedup, bounds,
 	// unknown-key rejection). Parse once, then apply the one behavioural rule it can't express.
-	const valid = skillManifest(input) as SkillManifest | ark.errors;
+	const valid = skillManifest(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("skill manifest invalid", valid.summary);
 	}
@@ -34,7 +34,7 @@ export function assertSkillManifest(input: unknown): SkillManifest {
 }
 
 export function assertSkillManifests(input: unknown): SkillManifest[] {
-	const valid = skillManifests(input) as SkillManifest[] | ark.errors;
+	const valid = skillManifests(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("skill manifests invalid", valid.summary);
 	}
@@ -44,11 +44,15 @@ export function assertSkillManifests(input: unknown): SkillManifest[] {
 export function defineSkill<const Manifest extends SkillManifest>(
 	manifest: Manifest,
 ): Manifest {
-	return assertSkillManifest(manifest) as Manifest;
+	// Validate for effect, hand back the caller's own literal — the schemas are pure constraints
+	// (no morphs), so the validated value IS the input and no cast is needed to keep the const type.
+	assertSkillManifest(manifest);
+	return manifest;
 }
 
 export function defineSkills<const Manifests extends readonly SkillManifest[]>(
 	manifests: Manifests,
 ): Manifests {
-	return assertSkillManifests(manifests) as unknown as Manifests;
+	assertSkillManifests(manifests);
+	return manifests;
 }

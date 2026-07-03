@@ -87,7 +87,7 @@ function assertSkillCatalogInput(input: unknown): SkillCatalogInput {
 }
 
 function assertSkillCatalogEntry(input: unknown): SkillCatalogEntry {
-	const valid = skillCatalogEntry(input) as SkillCatalogEntry | ark.errors;
+	const valid = skillCatalogEntry(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("skill catalog entry invalid", valid.summary);
 	}
@@ -95,7 +95,7 @@ function assertSkillCatalogEntry(input: unknown): SkillCatalogEntry {
 }
 
 function assertReadSkillInput(input: unknown): ReadSkillInput {
-	const valid = readSkillInput(input) as ReadSkillInput | ark.errors;
+	const valid = readSkillInput(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("read skill input invalid", valid.summary);
 	}
@@ -103,7 +103,7 @@ function assertReadSkillInput(input: unknown): ReadSkillInput {
 }
 
 function assertReadSkillContext(input: unknown): ReadSkillContext {
-	const valid = readSkillContext(input) as ReadSkillContext | ark.errors;
+	const valid = readSkillContext(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("read skill context invalid", valid.summary);
 	}
@@ -111,7 +111,7 @@ function assertReadSkillContext(input: unknown): ReadSkillContext {
 }
 
 function assertReadSkillResult(input: unknown): ReadSkillResult {
-	const valid = readSkillResult(input) as ReadSkillResult | ark.errors;
+	const valid = readSkillResult(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("read skill result invalid", valid.summary);
 	}
@@ -129,7 +129,7 @@ function staticCatalogEntry(manifest: SkillManifest): SkillCatalogEntry {
 }
 
 function assertActivateSkillInput(input: unknown): ActivateSkillInput {
-	const valid = activateSkillInput(input) as ActivateSkillInput | ark.errors;
+	const valid = activateSkillInput(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("activate skill input invalid", valid.summary);
 	}

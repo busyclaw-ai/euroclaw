@@ -32,7 +32,7 @@ import {
 } from "./schema";
 
 function assertInstallSkillInput(input: unknown): InstallSkillInput {
-	const valid = installSkillInput(input) as InstallSkillInput | ark.errors;
+	const valid = installSkillInput(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("install skill input invalid", valid.summary);
 	}
@@ -70,7 +70,7 @@ function assertEnableSkillInstallationInput(
 }
 
 function assertShareSkillResult(input: unknown): ShareSkillResult {
-	const valid = shareSkillResult(input) as ShareSkillResult | ark.errors;
+	const valid = shareSkillResult(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("share skill result invalid", valid.summary);
 	}

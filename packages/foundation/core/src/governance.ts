@@ -133,6 +133,8 @@ function stripReserved(ctx: Record<string, unknown>): Record<string, unknown> {
 // plugin's types onto the result — mirrors better-auth's `betterAuth<Options>(options)`.
 // Pattern/API only; the fold machinery lives in plugin.ts. See THIRD_PARTY_NOTICES.md.
 export function createGovernance<const Config extends GovernanceConfig>(
+	// One blessed cast: the impl needs the wide value AND the generic for the phantom folds below,
+	// so the empty-default takes the parameter's type (same family as the `$Infer: {} as …` phantoms).
 	config: Config = {} as Config,
 ): Governance<Config> {
 	// Each capability is enabled by providing its port (config keys, like a `database`).

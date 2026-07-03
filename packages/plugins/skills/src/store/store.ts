@@ -56,7 +56,7 @@ function assertCreateSkillPackageInput(
 }
 
 function assertSkillPackageRecord(input: unknown): SkillPackageRecord {
-	const valid = skillPackageRecord(input) as SkillPackageRecord | type.errors;
+	const valid = skillPackageRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("skill package record invalid", valid.summary);
 	}
@@ -91,7 +91,7 @@ function assertSkillInstallationRecord(
 }
 
 function assertCreateSkillAclInput(input: unknown): CreateSkillAclInput {
-	const valid = createSkillAclInput(input) as CreateSkillAclInput | type.errors;
+	const valid = createSkillAclInput(input);
 	if (valid instanceof type.errors) {
 		throw validationError("create skill acl input invalid", valid.summary);
 	}
@@ -99,7 +99,7 @@ function assertCreateSkillAclInput(input: unknown): CreateSkillAclInput {
 }
 
 function assertSkillAclRecord(input: unknown): SkillAclRecord {
-	const valid = skillAclRecord(input) as SkillAclRecord | type.errors;
+	const valid = skillAclRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("skill acl record invalid", valid.summary);
 	}
@@ -142,7 +142,7 @@ function assertCreateSkillReadInput(input: unknown): CreateSkillReadInput {
 }
 
 function assertSkillReadRecord(input: unknown): SkillReadRecord {
-	const valid = skillReadRecord(input) as SkillReadRecord | type.errors;
+	const valid = skillReadRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("skill read record invalid", valid.summary);
 	}
@@ -162,7 +162,7 @@ function assertCreateSkillProposalInput(
 }
 
 function assertSkillProposalRecord(input: unknown): SkillProposalRecord {
-	const valid = skillProposalRecord(input) as SkillProposalRecord | type.errors;
+	const valid = skillProposalRecord(input);
 	if (valid instanceof type.errors) {
 		throw validationError("skill proposal record invalid", valid.summary);
 	}

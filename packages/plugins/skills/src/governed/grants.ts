@@ -26,7 +26,7 @@ export function assertGrantActivationInput(
 }
 
 export function assertRequestShareInput(input: unknown): RequestShareInput {
-	const valid = requestShareInput(input) as RequestShareInput | ark.errors;
+	const valid = requestShareInput(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("request share input invalid", valid.summary);
 	}
@@ -34,7 +34,7 @@ export function assertRequestShareInput(input: unknown): RequestShareInput {
 }
 
 export function assertShareSkillInput(input: unknown): ShareSkillInput {
-	const valid = shareSkillInput(input) as ShareSkillInput | ark.errors;
+	const valid = shareSkillInput(input);
 	if (valid instanceof ark.errors) {
 		throw validationError("share skill input invalid", valid.summary);
 	}
