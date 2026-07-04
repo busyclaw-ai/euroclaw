@@ -46,6 +46,36 @@ describe("@euroclaw/sandboxes resource limits", () => {
 		await hostStillWorks();
 	}, 30000);
 
+	// R1b — the PREMISE the fs byte budget exists for: memfs lives in HOST heap and is NOT bounded by
+	// `memoryLimitBytes`. Here the SAME 8MB wasm cap that stops R1's in-wasm allocation does NOT stop a
+	// 32MB filesystem write when the fs budget is set well above it — the write goes through. This pins
+	// the invariant "the wasm cap does not cover the filesystem", which is why `maxFsBytes` (see T5) is
+	// load-bearing and must not be removed in favour of the memory cap. [P0-if-fails: if this ever
+	// starts erroring, memfs became wasm-bounded and the two budgets should be reconciled.]
+	it("R1b: memfs writes are NOT bounded by the wasm memory cap (why maxFsBytes exists)", async () => {
+		const { output: res } = await executeInSandbox({
+			// wasm heap capped at 8MB, but the fs budget is raised to 64MB so the WRITE cap is not what
+			// fires — this isolates the wasm cap and shows it does not apply to memfs.
+			sandbox: quickjs({
+				memoryLimitBytes: 8 * 1024 * 1024,
+				maxFsBytes: 64 * 1024 * 1024,
+			}),
+			code: [
+				'const fs = await import("node:fs");',
+				'const chunk = "x".repeat(1024 * 1024);', // 1MB
+				'let total = 0;',
+				'for (let i = 0; i < 32; i++) { fs.writeFileSync("/f" + i, chunk); total += chunk.length; }',
+				"return total;",
+			].join("\n"),
+			invoker: noInvoke,
+			context: { mountFs: {} },
+		});
+		// 32MB written and read back cleanly under an 8MB WASM cap — the wasm cap did not bound the fs.
+		expect(res.error).toBeUndefined();
+		expect(res.result).toBe(32 * 1024 * 1024);
+		await hostStillWorks();
+	}, 30000);
+
 	// R2 — deep recursion aborts the wasm context but surfaces as an error VALUE (not a host throw);
 	// the SAME provider instance and the host both survive. [P0-if-fails: a host throw fails the run].
 	it("R2: converts a deep-recursion wasm abort into an error value and survives", async () => {
