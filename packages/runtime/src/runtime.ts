@@ -556,10 +556,15 @@ export function createRuntime<const Config extends RuntimeConfig>(
 					});
 				}
 				const executeTool = tool.execute;
-				const args = await rehydrate(call.args);
 				// The stamp is read ONCE per call; invoker + effect both come from the validated view.
 				const stamp = toolGovernance(tool, call.name);
 				const isInvokerTool = stamp?.invoker === true;
+				// An invoker tool is BRAIN, not edge: it runs untrusted model-authored code, so its args
+				// must stay redacted (placeholders reach the guest). A normal tool is the trusted edge and
+				// rehydrates. Nested calls the guest makes are re-redacted on the way back (nested runTool
+				// below), so the guest only ever holds placeholders. Future: a "trusted/unredacted" sandbox
+				// variant opts out here.
+				const args = isInvokerTool ? call.args : await rehydrate(call.args);
 				const execute = (abortSignal?: unknown) =>
 					// Blessed seam cast: the AI-SDK ToolCallOptions type is closed; euroclaw extends it
 					// with `subInvoke` for invoker-stamped capability tools only (least authority).
@@ -707,7 +712,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 				audit: config.audit,
 				plugins: config.plugins,
 				resolveContext: resolveGovernanceContext,
-				runTool: async (call, _nestedCtx, { rehydrate }) => {
+				runTool: async (call, nestedCtx, { rehydrate }) => {
 					abortIfNeeded(state.abortSignal);
 					const tool = tools[call.name];
 					if (!tool || typeof tool.execute !== "function") {
@@ -716,11 +721,21 @@ export function createRuntime<const Config extends RuntimeConfig>(
 						});
 					}
 					const args = await rehydrate(call.args);
-					return tool.execute(args, {
+					const output = await tool.execute(args, {
 						toolCallId: newId("nested"),
 						messages: [],
 						abortSignal: state.abortSignal as never,
 					});
+					// The caller is untrusted BRAIN (an invoker tool's sandboxed code / a future
+					// subagent), so the real leaf-tool output must be re-redacted before it crosses back.
+					// Keyed on the resolved nested context so re-redaction stays within the run's subject
+					// scope. No-op without a redactor.
+					return config.redactor
+						? config.redactor.redactValue(
+								output,
+								redactionContextFrom(nestedCtx),
+							)
+						: output;
 				},
 				now,
 			});
