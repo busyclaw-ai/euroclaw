@@ -1,0 +1,58 @@
+{
+	"name": "@euroclaw/sandboxes",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Governed code execution for euroclaw: the run_code tool over pluggable isolation providers; QuickJS (WASM, in-process) first.",
+	"license": "MIT",
+	"author": "Konstantin Ponomarev",
+	"homepage": "https://github.com/euroclaw-sh/euroclaw#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/euroclaw-sh/euroclaw.git",
+		"directory": "packages/plugins/sandboxes"
+	},
+	"bugs": {
+		"url": "https://github.com/euroclaw-sh/euroclaw/issues"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./quickjs": {
+			"types": "./dist/quickjs/index.d.ts",
+			"import": "./dist/quickjs/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@euroclaw/contracts": "workspace:*",
+		"@jitl/quickjs-ng-wasmfile-release-sync": "0.32.0",
+		"@sebastianwessel/quickjs": "3.1.0",
+		"arktype": "2.2.0"
+	},
+	"peerDependencies": {
+		"ai": "^5.0.203"
+	},
+	"devDependencies": {
+		"@euroclaw/core": "workspace:*",
+		"@euroclaw/runtime": "workspace:*",
+		"@euroclaw/storage-core": "workspace:*",
+		"ai": "5.0.203",
+		"euroclaw": "workspace:*"
+	}
+}
