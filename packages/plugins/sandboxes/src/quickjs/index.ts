@@ -175,21 +175,32 @@ export function quickjs(config: QuickJsConfig = {}): Sandbox {
 			};
 
 			const body = guestBody(input.code);
-			const outcome = await runSandboxed(
-				async ({ evalCode }) => evalCode(body),
-				options,
-			);
-
-			if (outcome.ok) {
-				return toExecutionResult({ result: outcome.data, logs });
+			// Most guest faults come back as `{ ok: false, error }` (syntax error, timeout, thrown fetch
+			// stub) — an expected failure VALUE the model reads and fixes. But some abort the underlying
+			// wasm runtime and REJECT instead — notably deep recursion, which trips a GC assertion
+			// (`list_empty(&rt->gc_obj_list)`) as the aborted context is disposed. That abort is isolated
+			// to this one execution (a fresh context is built per call; the module and sibling executions
+			// survive — verified), so we catch the throw and convert it to the same failure VALUE rather
+			// than letting a host throw escape and fail the whole run_code call.
+			try {
+				const outcome = await runSandboxed(
+					async ({ evalCode }) => evalCode(body),
+					options,
+				);
+				return outcome.ok
+					? toExecutionResult({ result: outcome.data, logs })
+					: toExecutionResult({
+							result: null,
+							logs,
+							error: outcome.error.message,
+						});
+			} catch (error) {
+				return toExecutionResult({
+					result: null,
+					logs,
+					error: error instanceof Error ? error.message : String(error),
+				});
 			}
-			// A wrapper-level execution error (syntax error, timeout, thrown fetch stub) is an expected
-			// failure VALUE the model reads and fixes — not a thrown host error.
-			return toExecutionResult({
-				result: null,
-				logs,
-				error: outcome.error.message,
-			});
 		},
 	};
 }

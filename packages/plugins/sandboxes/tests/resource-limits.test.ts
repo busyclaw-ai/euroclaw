@@ -3,9 +3,10 @@
 // the host runtime must remain usable afterwards. Every test runs a trivial follow-up execute and
 // asserts it still returns 2: proof the preceding abuse did not corrupt the host.
 //
-// Scope note: the R2 deep-recursion probe is intentionally omitted here — it currently does NOT
-// produce a clean error value (it throws a host-level wasm abort) and is tracked as an open finding
-// in the suite report rather than committed as a red test.
+// R2 note: deep recursion aborts the underlying wasm runtime (a GC assertion trips as the aborted
+// context is disposed) and REJECTS rather than returning `{ ok: false }`. The provider now catches
+// that rejection and converts it to an error VALUE — the abort is isolated to the single execution,
+// so the same provider instance and the host stay usable. R2 below asserts all three.
 
 import { describe, expect, it } from "vitest";
 import type { SandboxToolInvoker } from "../src/core/contracts";
@@ -45,7 +46,39 @@ describe("@euroclaw/sandboxes resource limits", () => {
 		await hostStillWorks();
 	}, 30000);
 
-	// R2 (deep recursion) is withheld — see the scope note above and the suite report.
+	// R2 — deep recursion aborts the wasm context but surfaces as an error VALUE (not a host throw);
+	// the SAME provider instance and the host both survive. [P0-if-fails: a host throw fails the run].
+	it("R2: converts a deep-recursion wasm abort into an error value and survives", async () => {
+		const sandbox = quickjs();
+		// Sanity: the instance works before the bomb.
+		const before = await executeInSandbox({
+			sandbox,
+			code: "return 1",
+			invoker: noInvoke,
+			context: {},
+		});
+		expect(before.result).toBe(1);
+		// The bomb must NOT throw out of executeInSandbox — it must resolve to an error value.
+		const res = await executeInSandbox({
+			sandbox,
+			code: "function f(){ return f(); } return f();",
+			invoker: noInvoke,
+			context: {},
+		});
+		expect(res.error).toBeDefined();
+		expect(res.result).toBeNull();
+		// The SAME instance still works afterward — the abort did not poison the shared module.
+		const after = await executeInSandbox({
+			sandbox,
+			code: "return 2",
+			invoker: noInvoke,
+			context: {},
+		});
+		expect(after.result).toBe(2);
+		expect(after.error).toBeUndefined();
+		// And a fresh instance is fine too.
+		await hostStillWorks();
+	}, 30000);
 
 	// R3 — a never-resolving await is killed by the wall clock; it does not hang the host.
 	// [P0-if-fails].
