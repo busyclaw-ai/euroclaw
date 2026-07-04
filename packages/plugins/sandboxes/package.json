@@ -23,8 +23,12 @@
 			"import": "./dist/index.js"
 		},
 		"./quickjs": {
-			"types": "./dist/quickjs/index.d.ts",
-			"import": "./dist/quickjs/index.js"
+			"types": "./dist/providers/quickjs/index.d.ts",
+			"import": "./dist/providers/quickjs/index.js"
+		},
+		"./memory": {
+			"types": "./dist/storages/memory/index.d.ts",
+			"import": "./dist/storages/memory/index.js"
 		}
 	},
 	"main": "./dist/index.js",
@@ -43,7 +47,8 @@
 		"@euroclaw/contracts": "workspace:*",
 		"@jitl/quickjs-ng-wasmfile-release-sync": "0.32.0",
 		"@sebastianwessel/quickjs": "3.1.0",
-		"arktype": "2.2.0"
+		"arktype": "2.2.0",
+		"memfs": "4.57.8"
 	},
 	"peerDependencies": {
 		"ai": "^5.0.203"

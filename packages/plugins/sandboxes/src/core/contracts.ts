@@ -36,6 +36,44 @@ export type SandboxFetch = (
 ) => Promise<unknown>;
 
 // PORTS + HOST-ASSEMBLED VIEWS: plain types — no runtime boundary to validate.
+
+/**
+ * A virtual filesystem tree — the wrapper's memfs NestedDirectoryJSON shape: a file is a string or
+ * Uint8Array leaf, a directory is a nested object. Host-assembled (the engine builds it from a store,
+ * the provider extracts it from memfs), NOT an untrusted boundary — plain TS, no arktype.
+ */
+export type VolumeTree = Record<string, unknown>;
+
+/**
+ * An opaque, provider-agnostic reference a SandboxVolumeStore interprets: an S3 adapter reads it as
+ * bucket/prefix, a SharePoint adapter as drive/folder, the memory adapter as a map key. Kept a plain
+ * string in v1 — never parsed by the engine.
+ */
+export type VolumeRef = string;
+
+/**
+ * The persistence port. The guest's `node:fs` is SYNCHRONOUS and cannot await a remote store, so the
+ * model is snapshot-at-the-boundary: the engine async-`load`s a bounded tree into memfs BEFORE the
+ * guest runs, the guest does sync reads/writes on that in-memory tree, and the engine async-`save`s
+ * the mutated tree AFTER. (Lazy read-through / asyncify is deliberately deferred.) Plain-TS port —
+ * host-assembled, no schema.
+ */
+export type SandboxVolumeStore = {
+	/** Returns `{}` for an unknown ref — an unseeded ref is a fresh, empty volume, not an error. */
+	load: (ref: VolumeRef) => Promise<VolumeTree>;
+	save: (ref: VolumeRef, tree: VolumeTree) => Promise<void>;
+};
+
+/**
+ * What a provider hands back: the arktype-validated guest result, PLUS the mutated fs tree when (and
+ * only when) a tree was mounted. The tree rides ALONGSIDE `output`, never inside it — `output` stays
+ * the clean, guest-facing `ExecutionResult` the runtime's tool.completed validation accepts.
+ */
+export type SandboxExecution = {
+	output: ExecutionResult;
+	fsTree?: VolumeTree;
+};
+
 export interface Sandbox {
 	readonly provider: string;
 	/** Two configs of one provider need distinct names — the channels distinct-(provider,name) fold. */
@@ -48,7 +86,7 @@ export interface Sandbox {
 		code: string; // already normalized by the ENGINE
 		invoker: SandboxToolInvoker; // engine-wrapped; routes into handleToolCall
 		context: ExecutionContext; // normalized: limits, egress, injected capabilities
-	}) => Promise<ExecutionResult>;
+	}) => Promise<SandboxExecution>;
 	dispose?: () => Promise<void>;
 }
 
@@ -70,9 +108,10 @@ export type ExecutionContext = {
 	modules?: Record<string, string>;
 	/** The governed fetch the host supplies for this execution (see SandboxFetch). */
 	fetchAdapter?: SandboxFetch;
-	/** In-memory virtual filesystem tree (the wrapper's memfs NestedDirectoryJSON). No quota exists
-	 *  in the wrapper — the host bounds the seeded data size. */
-	mountFs?: Record<string, unknown>;
+	/** In-memory virtual filesystem tree to seed for this execution. memfs lives in the HOST heap and
+	 *  is NOT bounded by `memoryLimitBytes`, so the provider enforces a byte budget at BOTH the seed
+	 *  (load) and cumulative writes — see the quickjs provider's `maxFsBytes`. Absent = no fs. */
+	mountFs?: VolumeTree;
 };
 
 export interface SandboxToolInvoker {

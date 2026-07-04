@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import type { SandboxToolInvoker } from "../src/core/contracts";
 import { executeInSandbox } from "../src/index";
-import { quickjs } from "../src/quickjs/index";
+import { quickjs } from "../src/providers/quickjs/index";
 
 const noInvoke: SandboxToolInvoker = {
 	invoke: async () => {
@@ -21,7 +21,7 @@ describe("@euroclaw/sandboxes cross-execution isolation", () => {
 	// I1 — a global set in one execution does not persist into the next. [P0-if-fails].
 	it("I1: globalThis mutations do not persist across executions", async () => {
 		const sandbox = quickjs();
-		const first = await executeInSandbox({
+		const { output: first } = await executeInSandbox({
 			sandbox,
 			code: 'globalThis.__leak = 42; return "ok";',
 			invoker: noInvoke,
@@ -29,7 +29,7 @@ describe("@euroclaw/sandboxes cross-execution isolation", () => {
 		});
 		expect(first.result).toBe("ok");
 
-		const second = await executeInSandbox({
+		const { output: second } = await executeInSandbox({
 			sandbox,
 			code: "return typeof globalThis.__leak;",
 			invoker: noInvoke,
@@ -41,7 +41,7 @@ describe("@euroclaw/sandboxes cross-execution isolation", () => {
 	// I2 — prototype pollution in one execution does not persist into the next. [P0-if-fails].
 	it("I2: prototype pollution does not persist across executions", async () => {
 		const sandbox = quickjs();
-		const first = await executeInSandbox({
+		const { output: first } = await executeInSandbox({
 			sandbox,
 			code: 'Object.prototype.__p = 1; return "ok";',
 			invoker: noInvoke,
@@ -49,7 +49,7 @@ describe("@euroclaw/sandboxes cross-execution isolation", () => {
 		});
 		expect(first.result).toBe("ok");
 
-		const second = await executeInSandbox({
+		const { output: second } = await executeInSandbox({
 			sandbox,
 			code: 'return ({}).__p ?? "clean";',
 			invoker: noInvoke,
@@ -62,7 +62,7 @@ describe("@euroclaw/sandboxes cross-execution isolation", () => {
 	// a fresh memfs seeded only from its own mountFs. [P0-if-fails].
 	it("I3: mounted filesystem writes do not persist across executions", async () => {
 		const sandbox = quickjs();
-		const first = await executeInSandbox({
+		const { output: first } = await executeInSandbox({
 			sandbox,
 			code: 'const fs = await import("node:fs"); fs.writeFileSync("/a.txt", "one"); return "wrote";',
 			invoker: noInvoke,
@@ -70,7 +70,7 @@ describe("@euroclaw/sandboxes cross-execution isolation", () => {
 		});
 		expect(first.result).toBe("wrote");
 
-		const second = await executeInSandbox({
+		const { output: second } = await executeInSandbox({
 			sandbox,
 			code: 'const fs = await import("node:fs"); try { return fs.readFileSync("/a.txt","utf8"); } catch { return "absent"; }',
 			invoker: noInvoke,

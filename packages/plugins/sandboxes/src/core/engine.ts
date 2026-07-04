@@ -5,9 +5,9 @@ import { validationError } from "@euroclaw/contracts";
 import { type } from "arktype";
 import {
 	type ExecutionContext,
-	type ExecutionResult,
 	executionResult,
 	type Sandbox,
+	type SandboxExecution,
 	type SandboxToolInvoker,
 	sandboxInvokeInput,
 } from "./contracts";
@@ -67,29 +67,31 @@ function wrapInvoker(invoker: SandboxToolInvoker): SandboxToolInvoker {
 }
 
 /**
- * Normalize the code, wrap the invoker, run it on the provider, and validate the raw return against
- * the floor `executionResult`. A shape mismatch is a provider bug (not model input) → host-side
- * validationError. Timeout ownership stays with the provider (the wrapper's executionTimeout); the
- * engine adds no second racing timer.
+ * Normalize the code, wrap the invoker, run it on the provider, and validate the provider's `output`
+ * against the floor `executionResult`. A shape mismatch is a provider bug (not model input) →
+ * host-side validationError. The mutated `fsTree` (present only when a tree was mounted) is passed
+ * back UNVALIDATED — it is host-assembled, not guest-facing. Timeout ownership stays with the
+ * provider (the wrapper's executionTimeout); the engine adds no second racing timer. The runcode
+ * layer, not the provider, owns the store load/save around this call.
  */
 export async function executeInSandbox(input: {
 	sandbox: Sandbox;
 	code: string;
 	invoker: SandboxToolInvoker;
 	context: ExecutionContext;
-}): Promise<ExecutionResult> {
+}): Promise<SandboxExecution> {
 	const code = normalizeCode(input.code);
 	const invoker = wrapInvoker(input.invoker);
-	const raw = await input.sandbox.execute({
+	const { output, fsTree } = await input.sandbox.execute({
 		code,
 		invoker,
 		context: input.context,
 	});
-	const valid = executionResult(raw);
+	const valid = executionResult(output);
 	if (valid instanceof type.errors) {
 		throw validationError("sandbox execution result invalid", valid.summary, {
 			provider: input.sandbox.provider,
 		});
 	}
-	return valid;
+	return fsTree !== undefined ? { output: valid, fsTree } : { output: valid };
 }

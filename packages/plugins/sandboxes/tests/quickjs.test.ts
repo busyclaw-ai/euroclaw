@@ -5,7 +5,7 @@ import type {
 	SandboxToolInvoker,
 } from "../src/core/contracts";
 import { executeInSandbox } from "../src/index";
-import { quickjs } from "../src/quickjs/index";
+import { quickjs } from "../src/providers/quickjs/index";
 
 const noInvoke: SandboxToolInvoker = {
 	invoke: async () => {
@@ -15,7 +15,7 @@ const noInvoke: SandboxToolInvoker = {
 
 describe("@euroclaw/sandboxes quickjs provider", () => {
 	it("runs plain code with a top-level return", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: "return 1 + 1",
 			invoker: noInvoke,
@@ -34,7 +34,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 			},
 		};
 
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: 'return await tools.echo.hello({ v: "x" })',
 			invoker,
@@ -51,7 +51,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 			invoke: async () => ({ status: "denied", gateId: "g", reason: "no" }),
 		};
 
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: 'const r = await tools.x.y({}); return r.status === "denied" ? "was-denied" : "other";',
 			invoker,
@@ -63,7 +63,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 	});
 
 	it("blocks fetch by default and injects the governed fetchAdapter when supplied", async () => {
-		const blocked = await executeInSandbox({
+		const { output: blocked } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: 'return await fetch("https://example.test/")',
 			invoker: noInvoke,
@@ -76,7 +76,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 			status: 200,
 			text: async () => `body:${String(input)}`,
 		});
-		const allowed = await executeInSandbox({
+		const { output: allowed } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: 'const r = await fetch("https://example.test/data"); return await r.text();',
 			invoker: noInvoke,
@@ -87,7 +87,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 
 	it("kills a runaway loop under the wall-clock limit and returns promptly", async () => {
 		const start = Date.now();
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs({ timeoutMs: 500 }),
 			code: "while (true) {}",
 			invoker: noInvoke,
@@ -99,7 +99,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 
 	it("captures console into logs and does not print guest logs to host stdout", async () => {
 		const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: 'console.log("hi"); return 1;',
 			invoker: noInvoke,
@@ -115,7 +115,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 	});
 
 	it("mounts a virtual filesystem only when a tree is supplied", async () => {
-		const mounted = await executeInSandbox({
+		const { output: mounted } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: [
 				'const fs = await import("node:fs");',
@@ -127,7 +127,7 @@ describe("@euroclaw/sandboxes quickjs provider", () => {
 		});
 		expect(mounted.result).toBe("hi there");
 
-		const unmounted = await executeInSandbox({
+		const { output: unmounted } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: [
 				'const fs = await import("node:fs");',

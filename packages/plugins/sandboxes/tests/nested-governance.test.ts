@@ -20,7 +20,7 @@ import type {
 	SandboxToolInvoker,
 } from "../src/core/contracts";
 import { executeInSandbox, runCodeTool } from "../src/index";
-import { quickjs } from "../src/quickjs/index";
+import { quickjs } from "../src/providers/quickjs/index";
 
 type V2Model = Parameters<typeof wrapLanguageModel>[0]["model"];
 
@@ -82,7 +82,7 @@ function recordingSandbox(): {
 			validate: inner.validate,
 			execute: async (input) => {
 				const res = await inner.execute(input);
-				captured = res;
+				captured = res.output;
 				return res;
 			},
 		},
@@ -102,7 +102,7 @@ describe("@euroclaw/sandboxes nested governance", () => {
 				reasonCode: "POLICY_X",
 			}),
 		};
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: "const r = await tools.x.y({}); return { status: r.status, gateId: r.gateId, reasonCode: r.reasonCode };",
 			invoker,
@@ -126,7 +126,7 @@ describe("@euroclaw/sandboxes nested governance", () => {
 				return { i: (input.args as { i: number }).i };
 			},
 		};
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: "const [a, b] = await Promise.all([tools.a({ i: 1 }), tools.b({ i: 2 })]); return { a, b };",
 			invoker,
@@ -146,7 +146,7 @@ describe("@euroclaw/sandboxes nested governance", () => {
 		const invoker: SandboxToolInvoker = {
 			invoke: async () => ({ status: "denied", gateId: "g", reason: "no" }),
 		};
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox: quickjs(),
 			code: "const r1 = await tools.x({}); const r2 = await tools.x({}); return [r1.status, r2.status];",
 			invoker,

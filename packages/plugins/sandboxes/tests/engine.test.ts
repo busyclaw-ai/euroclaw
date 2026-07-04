@@ -24,7 +24,7 @@ function fakeProvider(
 	return {
 		provider: "fake",
 		posture: POSTURE,
-		execute: ({ invoker }) => run(invoker),
+		execute: async ({ invoker }) => ({ output: await run(invoker) }),
 	};
 }
 
@@ -52,7 +52,7 @@ describe("@euroclaw/sandboxes engine", () => {
 			} as unknown as SandboxInvokeInput),
 		}));
 
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: "",
 			invoker: unusedInvoker,
@@ -76,7 +76,7 @@ describe("@euroclaw/sandboxes engine", () => {
 			result: await invoker.invoke({ path: "a.b", args: { v: 1 } }),
 		}));
 
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: "",
 			invoker: raw,
@@ -101,7 +101,7 @@ describe("@euroclaw/sandboxes engine", () => {
 			result: await invoker.invoke({ path: "a", args: {} }),
 		}));
 
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: "",
 			invoker: raw,

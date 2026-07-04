@@ -3,7 +3,7 @@ import { createRuntime, govern } from "@euroclaw/runtime";
 import { jsonSchema, tool, type wrapLanguageModel } from "ai";
 import { describe, expect, it } from "vitest";
 import { runCodeTool } from "../src/index";
-import { quickjs } from "../src/quickjs/index";
+import { quickjs } from "../src/providers/quickjs/index";
 
 type V2Model = Parameters<typeof wrapLanguageModel>[0]["model"];
 

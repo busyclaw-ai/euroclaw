@@ -8,6 +8,8 @@ import type {
 	ExecutionContext,
 	Sandbox,
 	SandboxToolInvoker,
+	SandboxVolumeStore,
+	VolumeRef,
 } from "./core/contracts";
 import { executeInSandbox } from "./core/engine";
 
@@ -32,6 +34,16 @@ export function runCodeTool(input: {
 	 *  governed fetchAdapter. Default: {} (no fetch, no fs, defaults-only bounds). */
 	context?: (options: { toolCallId: string }) => ExecutionContext;
 	description?: string;
+	/** When supplied, the mounted filesystem PERSISTS across run_code calls that resolve to the same
+	 *  VolumeRef: the engine snapshots a bounded tree in (load) before the guest runs and out (save)
+	 *  after. Absent = no filesystem at all, exactly as before this slice (no regression). */
+	store?: SandboxVolumeStore;
+	/** Resolves the VolumeRef for an execution. Default: the `toolCallId` — a per-call scope, because
+	 *  the claw/conversation id is NOT reachable through the AI-SDK tool boundary (the runtime injects
+	 *  it into the governance context, not the tool's execute options). For cross-call persistence the
+	 *  host supplies this resolver (e.g. mapping to a claw id it closes over, or an external S3/
+	 *  SharePoint key). Only consulted when `store` is set. */
+	volumeRef?: (options: { toolCallId: string }) => VolumeRef;
 }): ToolSet[string] {
 	const theTool = tool({
 		description: input.description ?? DEFAULT_DESCRIPTION,
@@ -61,13 +73,31 @@ export function runCodeTool(input: {
 				invoke: ({ path, args }) =>
 					subInvoke(path, args as Record<string, unknown>),
 			};
-			const context = input.context?.({ toolCallId }) ?? {};
-			return executeInSandbox({
+			const baseContext = input.context?.({ toolCallId }) ?? {};
+
+			// Snapshot-in / snapshot-out around the run: when a store is configured, load the bounded
+			// tree for this ref, mount it (the store owns the fs — it wins over any host-supplied
+			// mountFs), run, then save the mutated tree the provider handed back. Without a store the
+			// filesystem is absent unless the host set mountFs directly (the pre-slice behavior).
+			const store = input.store;
+			const ref = store
+				? (input.volumeRef?.({ toolCallId }) ?? toolCallId)
+				: undefined;
+			const tree =
+				store && ref !== undefined ? await store.load(ref) : undefined;
+			const context: ExecutionContext =
+				tree !== undefined ? { ...baseContext, mountFs: tree } : baseContext;
+
+			const { output, fsTree } = await executeInSandbox({
 				sandbox: input.sandbox,
 				code,
 				invoker,
 				context,
 			});
+			if (store && ref !== undefined && fsTree !== undefined) {
+				await store.save(ref, fsTree);
+			}
+			return output;
 		},
 	});
 

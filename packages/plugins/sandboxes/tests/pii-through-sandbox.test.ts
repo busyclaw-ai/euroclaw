@@ -18,7 +18,7 @@ import { jsonSchema, tool, type wrapLanguageModel } from "ai";
 import { describe, expect, it } from "vitest";
 import type { ExecutionResult, Sandbox } from "../src/core/contracts";
 import { runCodeTool } from "../src/index";
-import { quickjs } from "../src/quickjs/index";
+import { quickjs } from "../src/providers/quickjs/index";
 
 // Known-good email detector, copied verbatim from runtime.test.ts.
 const emailDetector: Detector = (text) => {
@@ -107,7 +107,7 @@ function recordingSandbox(): {
 			validate: inner.validate,
 			execute: async (input) => {
 				const res = await inner.execute(input);
-				captured = res;
+				captured = res.output;
 				return res;
 			},
 		},

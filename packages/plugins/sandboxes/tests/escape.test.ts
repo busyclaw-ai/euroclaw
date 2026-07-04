@@ -9,7 +9,7 @@ import type {
 	SandboxToolInvoker,
 } from "../src/core/contracts";
 import { executeInSandbox } from "../src/index";
-import { quickjs } from "../src/quickjs/index";
+import { quickjs } from "../src/providers/quickjs/index";
 
 // The wasm module load is memoized per instance; one guest context is still created per execute,
 // so a single provider is safe to share across these read-only escape probes.
@@ -26,7 +26,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 	// E1 — there is no working network without a host-supplied adapter: any reachable `fetch` is the
 	// wrapper's throwing stub.
 	it("E1: exposes no working fetch without an adapter", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `
 				const out = { fetchType: typeof fetch, globalFetchType: typeof globalThis.fetch };
@@ -55,7 +55,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 	// E2 — no alternate network builtins exist. [P0-if-fails]: a working one is an uncontrolled egress
 	// channel that bypasses the governed fetch seam entirely.
 	it("E2: exposes no alternate network builtins", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `return {
 				xhr: typeof XMLHttpRequest,
@@ -79,7 +79,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 	// absent (spawning is [P0-if-fails]); `node:fs` may be importable (memfs) but must NEVER reach the
 	// real host disk: unmounted it is disabled, and a probe of a real host path must fail.
 	it("E3: grants no working host filesystem or process handle", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `
 				const out = { require: typeof require };
@@ -122,7 +122,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 	// E4 — no host environment leakage. [P0-if-fails]: a leaked host secret (a real process.env value)
 	// is exfiltration. The injected bridge key is acceptable; a host env var is not.
 	it("E4: leaks no host environment variables", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `return {
 				hasProcess: typeof process,
@@ -160,7 +160,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 
 	// E5 — `env` holds only the bridge: nothing that exposes host state.
 	it("E5: env exposes only the __invoke bridge", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `return Object.keys(env);`,
 			invoker: noInvoke,
@@ -174,7 +174,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 	// escapes reach only the guest's OWN global (=== globalThis): no host require, no host env, and
 	// the reachable fetch is the same throwing guest stub — no additional authority is granted.
 	it("E6: the Function-constructor walk reaches only the guest global", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `
 				const g1 = (function(){}).constructor("return this")();
@@ -218,7 +218,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 				return { echoed: input.args };
 			},
 		};
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `return await env.__invoke("some.tool", { a: 1 });`,
 			invoker,
@@ -233,7 +233,7 @@ describe("@euroclaw/sandboxes escape boundary", () => {
 	// E8 — the bridge leaks no host internals: stringifying the injected function must not expose a
 	// host filesystem path, euroclaw source, or subInvoke/handler internals.
 	it("E8: the __invoke bridge exposes no host source or internals", async () => {
-		const res = await executeInSandbox({
+		const { output: res } = await executeInSandbox({
 			sandbox,
 			code: `return String(env.__invoke);`,
 			invoker: noInvoke,
