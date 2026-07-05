@@ -1,5 +1,6 @@
 import type { ClawEngineFactory, ClawEngineHandle } from "@euroclaw/contracts";
 import {
+	ACTOR_CONTEXT_KEY,
 	type Adapter,
 	type AuditSink,
 	type ClawsStore,
@@ -9,8 +10,11 @@ import {
 	type EuroclawPlugin,
 	type EuroclawPluginConfigureContext,
 	type InferPluginApi,
+	ORGANIZATION_CONTEXT_KEY,
+	type SecretResolver,
 } from "@euroclaw/contracts";
 import {
+	createRegisteredToolProvider,
 	createRuntime,
 	defaultRuntimeNewId,
 	pluginEventSink,
@@ -75,7 +79,7 @@ export type ClawStores = {
 
 export type ClawConfig<Config extends RuntimeConfig = RuntimeConfig> = Omit<
 	Config,
-	"database" | "effectStore" | "events"
+	"database" | "effectStore" | "events" | "resolveTools"
 > & {
 	cronHandler?: ClawCronHandlerConfig;
 	database?: ClawDatabase;
@@ -86,6 +90,11 @@ export type ClawConfig<Config extends RuntimeConfig = RuntimeConfig> = Omit<
 	>;
 	events?: RuntimeEventSink | readonly RuntimeEventSink[];
 	models?: ClawModelsConfig;
+	/** The credential seam registered-tool invocation resolves against. euroclaw stores no secrets;
+	 *  the host wires this to its vault/env/SSM adapter. Absent ⇒ authed registered tools fail loud
+	 *  (a null-material resolver); public registered tools still work. `resolveTools` is built by the
+	 *  assembly from the org's rows + this resolver — hosts never set it directly. */
+	resolveSecret?: SecretResolver;
 	stores?: ClawStores;
 };
 
@@ -335,6 +344,31 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 	const registryStores =
 		config.stores?.registry ??
 		(adapter ? createRegistryStores(adapter) : undefined);
+	// Registered tools become executable per run: synthesize an org's rows into invoker-backed tools
+	// (credentials via the host's resolveSecret; absent ⇒ a null resolver — public tools work, authed
+	// ones fail loud) and hand the runtime a per-run resolver. org/actor are read from the RESOLVED
+	// turn context and closure-captured at synthesis (never from the AI-SDK execute options).
+	const registeredToolProvider = registryStores
+		? createRegisteredToolProvider({
+				resolveSecret: config.resolveSecret ?? (() => null),
+			})
+		: undefined;
+	const resolveTools: RuntimeConfig["resolveTools"] =
+		registryStores && registeredToolProvider
+			? async (ctx) => {
+					const organizationId = ctx[ORGANIZATION_CONTEXT_KEY];
+					if (typeof organizationId !== "string") return {};
+					const rows =
+						await registryStores.registeredTools.listByOrganization(
+							organizationId,
+						);
+					const actor = ctx[ACTOR_CONTEXT_KEY];
+					return registeredToolProvider(rows, {
+						organizationId,
+						...(typeof actor === "string" ? { actor } : {}),
+					});
+				}
+			: undefined;
 	const eventSinks = [
 		...(clawsStore ? [createClawRuntimeEventSink(clawsStore)] : []),
 		...eventSinksFrom(config.events),
@@ -362,6 +396,7 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 		...(adapter ? { database: adapter } : {}),
 		...(effectsStore ? { effectStore: effectsStore } : {}),
 		...(eventSinks.length > 0 ? { events: eventSinks } : {}),
+		...(resolveTools ? { resolveTools } : {}),
 	} as ResolvedConfig<Config>);
 	const engine = config.engine?.create(runtime);
 	const newId = config.environment?.newId ?? defaultRuntimeNewId;
@@ -400,5 +435,9 @@ export { govern } from "@euroclaw/runtime";
 export type { ClawDatabase } from "./database";
 export { createClawRuntimeEventSink } from "./events";
 export type { ActionView } from "./registry";
-export { assembleOrgActions, registerOpenApiSpecTool } from "./registry";
+export {
+	assembleOrgActions,
+	registerOpenApiSpecTool,
+	serverForActionFromRegisteredTools,
+} from "./registry";
 export { getEuroclawTables } from "./tables";
