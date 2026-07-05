@@ -25,7 +25,8 @@
 	"dependencies": {
 		"@cedar-policy/cedar-wasm": "4.11.1",
 		"@euroclaw/authz": "workspace:*",
-		"@euroclaw/contracts": "workspace:*"
+		"@euroclaw/contracts": "workspace:*",
+		"arktype": "2.2.0"
 	},
 	"devDependencies": {
 		"@euroclaw/core": "workspace:*"

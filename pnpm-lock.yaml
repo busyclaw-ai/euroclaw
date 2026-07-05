@@ -274,6 +274,9 @@ importers:
       '@euroclaw/contracts':
         specifier: workspace:*
         version: link:../../foundation/contracts
+      arktype:
+        specifier: 2.2.0
+        version: 2.2.0
     devDependencies:
       '@euroclaw/core':
         specifier: workspace:*

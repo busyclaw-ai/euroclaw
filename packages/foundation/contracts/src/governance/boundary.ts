@@ -114,6 +114,50 @@ export const RUN_MODE_CONTEXT_KEY = "euroclaw__runMode";
 /** The value vocabulary for `RUN_MODE_CONTEXT_KEY`. */
 export type RunMode = "interactive" | "autonomous";
 
+/** The policy-facing stamped identity facts, unprefixed — what engines put into request context. */
+export type StampedFacts = {
+	role?: string;
+	team?: string;
+	clawId?: string;
+	organizationId?: string;
+	runMode?: RunMode;
+};
+
+/**
+ * Read the runtime-stamped identity facts from a resolution context, TYPED: validates the
+ * reserved keys (a host stamping garbage is a config bug — fail LOUD, never silently unstamped)
+ * and renames them to their policy-facing names. The one reader every policy engine shares —
+ * call sites never Reflect/typeof-probe the reserved namespace. Undeclared keys (the caller's
+ * own context, other reserved stamps) are ignored, not validated here.
+ */
+export const stampedFacts = type({
+	// Literal keys — these ARE the *_CONTEXT_KEY constants above (arktype defs need literals;
+	// tests/stamped-facts.test.ts builds its context from the constants to guard drift).
+	"euroclaw__role?": "string",
+	"euroclaw__team?": "string",
+	"euroclaw__clawId?": "string",
+	"euroclaw__organizationId?": "string",
+	"euroclaw__runMode?": "'interactive' | 'autonomous'",
+}).pipe(
+	(stamps): StampedFacts => ({
+		...(stamps.euroclaw__role !== undefined
+			? { role: stamps.euroclaw__role }
+			: {}),
+		...(stamps.euroclaw__team !== undefined
+			? { team: stamps.euroclaw__team }
+			: {}),
+		...(stamps.euroclaw__clawId !== undefined
+			? { clawId: stamps.euroclaw__clawId }
+			: {}),
+		...(stamps.euroclaw__organizationId !== undefined
+			? { organizationId: stamps.euroclaw__organizationId }
+			: {}),
+		...(stamps.euroclaw__runMode !== undefined
+			? { runMode: stamps.euroclaw__runMode }
+			: {}),
+	}),
+);
+
 /**
  * A trusted hook to enrich the (already reserved-key-stripped) context before gates run — the seam
  * where the claw stamps the resolved actor/team/role. Governance stays NEUTRAL: it runs this once per call
