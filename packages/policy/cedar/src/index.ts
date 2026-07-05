@@ -293,7 +293,11 @@ export function cedar(config: CedarPluginConfig): PolicyPlugin<CedarContext> {
 					...(typeof role === "string" ? { role } : {}),
 					...(typeof team === "string" ? { team } : {}),
 					...(typeof clawId === "string" ? { clawId } : {}),
-					...(typeof runMode === "string" ? { runMode } : {}),
+					// Narrowed to the RunMode contract — a garbage host value doesn't stamp at all
+					// (same "stamped when resolution provides it" semantics as the other facts).
+					...(runMode === "interactive" || runMode === "autonomous"
+						? { runMode }
+						: {}),
 					...(typeof organizationId === "string" ? { organizationId } : {}),
 				},
 			};

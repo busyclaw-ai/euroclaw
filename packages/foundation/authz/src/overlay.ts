@@ -25,6 +25,20 @@ export type FactsOverlayEntry = {
 	audit?: boolean;
 };
 
+// The entry seam is a real boundary: overlay facts arrive as stored rows (already parsed, but
+// carrying extra columns) OR as a host-authored config object (unvalidated). One arktype gates
+// both — and `"+": "delete"` strips undeclared keys, so the merge below is a plain spread of
+// exactly the overridable facts, never a field-by-field dance. Validated on a shallow copy: the
+// delete morph must not mutate the caller's row.
+const overlayFacts = type({
+	actionId: "string",
+	"access?": "'read' | 'write'",
+	"groups?": "string[]",
+	"resource?": "string",
+	"audit?": "boolean",
+	"+": "delete",
+});
+
 export type OverlayMergeResult = {
 	inputs: AuthzActionInput[];
 	/** write→read downgrades — surface these loudly at boot/registration; never silent. */
@@ -42,8 +56,12 @@ export function mergeFactsOverlay(
 	inputs: readonly AuthzActionInput[],
 	overlay: readonly FactsOverlayEntry[],
 ): OverlayMergeResult {
-	const byAction = new Map<string, FactsOverlayEntry>();
-	for (const entry of overlay) {
+	const byAction = new Map<string, typeof overlayFacts.infer>();
+	for (const raw of overlay) {
+		const entry = overlayFacts({ ...raw });
+		if (entry instanceof type.errors) {
+			throw validationError("facts overlay entry invalid", entry.summary);
+		}
 		if (byAction.has(entry.actionId)) {
 			throw configurationError("facts overlay has a duplicate override", {
 				actionId: entry.actionId,
@@ -67,13 +85,9 @@ export function mergeFactsOverlay(
 			}
 		}
 
-		const governance: ToolGovernance = {
-			...input.governance,
-			...(entry.access !== undefined ? { access: entry.access } : {}),
-			...(entry.groups !== undefined ? { groups: [...entry.groups] } : {}),
-			...(entry.resource !== undefined ? { resource: entry.resource } : {}),
-			...(entry.audit !== undefined ? { audit: entry.audit } : {}),
-		};
+		// `entry` holds exactly the overridable facts (undeclared keys deleted, absent stay absent).
+		const { actionId: _actionId, ...facts } = entry;
+		const governance: ToolGovernance = { ...input.governance, ...facts };
 		return { ...input, governance };
 	});
 

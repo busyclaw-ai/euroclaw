@@ -15,7 +15,19 @@ export const policyRequest = type({
 	principal: entityRef,
 	action: entityRef,
 	resource: entityRef,
-	context: type.Record("string", "unknown"),
+	// The euroclaw-standard context facts, typed by NAME — runtime-stamped and spoof-proof
+	// (mapCall reads them from resolution context; caller-supplied euroclaw__ keys are stripped
+	// upstream). Consumers (the org router, engines) read them typed instead of duck-probing.
+	// Engines append their own keys (e.g. the projected `args`) through the index signature.
+	context: {
+		"confirmationUsed?": "boolean",
+		"clawId?": "string",
+		"organizationId?": "string",
+		"role?": "string",
+		"runMode?": "'interactive' | 'autonomous'",
+		"team?": "string",
+		"[string]": "unknown",
+	},
 });
 
 /** The universal authorization request (PARC — principal/action/resource/context). */

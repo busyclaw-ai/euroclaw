@@ -6,7 +6,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import { createOrgPolicyRouter } from "../src/index";
 
-const req = (organizationId?: unknown): PolicyRequest => ({
+const req = (organizationId?: string): PolicyRequest => ({
 	principal: { type: "User", id: "alice" },
 	action: { type: "Action", id: "x" },
 	resource: { type: "Tool", id: "x" },
@@ -111,7 +111,9 @@ describe("createOrgPolicyRouter", () => {
 		expect(builds).toBe(4);
 	});
 
-	it("routes an absent or non-string organizationId to the undefined (system) bundle", async () => {
+	it("routes an absent organizationId to the undefined (system) bundle", async () => {
+		// A non-string organizationId can't reach the router: the PARC request schema types it
+		// (contracts authz/request.ts) and createPolicyPlugin validates every request at the gate.
 		const orgs: (string | undefined)[] = [];
 		const router = createOrgPolicyRouter({
 			keyFor: (org) => org ?? "system",
@@ -120,9 +122,8 @@ describe("createOrgPolicyRouter", () => {
 				return taggedEngine("system");
 			},
 		});
-		await router.authorize(req()); // no organizationId
-		await router.authorize(req(42)); // non-string
-		expect(orgs).toEqual([undefined]); // both hit the same "system" key, built once, org undefined
+		await router.authorize(req());
+		expect(orgs).toEqual([undefined]);
 	});
 
 	it("passes the resolved engine's decision through verbatim", async () => {

@@ -41,14 +41,10 @@ export function createOrgPolicyRouter(
 	const cache = new Map<string, Promise<PolicyEngine>>();
 
 	return {
-		...(config.capabilities !== undefined
-			? { capabilities: config.capabilities }
-			: {}),
+		capabilities: config.capabilities,
 		async authorize(req) {
-			const organizationId =
-				typeof req.context.organizationId === "string"
-					? req.context.organizationId
-					: undefined;
+			// Typed by the PARC contract (validated at the gate) — no duck-probing.
+			const organizationId = req.context.organizationId;
 			const key = await config.keyFor(organizationId);
 
 			const cached = cache.get(key);
