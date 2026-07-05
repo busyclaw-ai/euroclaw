@@ -341,6 +341,12 @@ export type {
 	RegisteredToolStore,
 	SpecRegistrationStore,
 } from "./tools/registry-ports";
+// ── secret resolution: the invoker's credential port (adapters: env/SSM/Infisical/vault…) ──
+export type {
+	SecretMaterial,
+	SecretRequest,
+	SecretResolver,
+} from "./tools/secrets";
 // ── tool sources: what every extractor produces (types only; impls in @euroclaw/runtime) ──
 export type {
 	SourceDiagnostic,
