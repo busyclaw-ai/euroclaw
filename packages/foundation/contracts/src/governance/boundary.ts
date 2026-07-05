@@ -106,6 +106,13 @@ export const RUN_ID_CONTEXT_KEY = "euroclaw__runId";
 export const SUBJECT_CONTEXT_KEY = "euroclaw__subjectId";
 export const TENANT_CONTEXT_KEY = "euroclaw__tenantId";
 export const MEMORY_NAMESPACE_CONTEXT_KEY = "euroclaw__memoryNamespace";
+// How the run started — stamped by the runtime from mechanical fact (sendMessage/api.run =
+// interactive; engine/scheduled runs = autonomous), never claimed by a caller. Policies read it
+// to attenuate borrowed authority: an autonomous run has no human present to confirm.
+export const RUN_MODE_CONTEXT_KEY = "euroclaw__runMode";
+
+/** The value vocabulary for `RUN_MODE_CONTEXT_KEY`. */
+export type RunMode = "interactive" | "autonomous";
 
 /**
  * A trusted hook to enrich the (already reserved-key-stripped) context before gates run — the seam

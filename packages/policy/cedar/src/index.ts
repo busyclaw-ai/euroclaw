@@ -23,20 +23,17 @@ import {
 	checkParseSchema,
 	isAuthorized,
 } from "@cedar-policy/cedar-wasm/nodejs";
+import { createPolicyPlugin, type PolicyPlugin } from "@euroclaw/authz";
 import {
 	configurationError,
+	type EntityRef,
+	type PolicyEngine,
+	type PolicyRequest,
 	ROLE_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
 	type ToolCall,
 	validationError,
 } from "@euroclaw/contracts";
-import {
-	createPolicyPlugin,
-	type EntityRef,
-	type PolicyEngine,
-	type PolicyPlugin,
-	type PolicyRequest,
-} from "@euroclaw/policy-core";
 
 /** Cedar's request context: who is acting. Approval state is derived server-side. */
 export type CedarContext = { principal: string };
@@ -205,11 +202,11 @@ export function cedar(config: CedarPluginConfig): PolicyPlugin<CedarContext> {
 	});
 }
 
+export type { PolicyPlugin } from "@euroclaw/authz";
+export { createPolicyPlugin } from "@euroclaw/authz";
 export type {
 	EntityRef,
 	PolicyEngine,
-	PolicyPlugin,
 	PolicyRequest,
 	PolicyResult,
-} from "@euroclaw/policy-core";
-export { createPolicyPlugin } from "@euroclaw/policy-core";
+} from "@euroclaw/contracts";

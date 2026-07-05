@@ -36,7 +36,10 @@ export type ToolGate = (
 	ctx: TurnContext,
 ) => GateDecision | Promise<GateDecision>;
 
-/** Governance attached to a single tool — the contract an adapter reads back. */
+/** Governance attached to a single tool — the contract an adapter reads back. Besides the gate
+ *  and effect policy, the stamp carries the authorization-model FACTS (`ActionDef` fields) for
+ *  hand-authored tools — what the OpenAPI/MCP generators derive from specs, an author declares
+ *  here. Facts, never posture: "may the agent do this" is policy, not a tool attribute. */
 export const toolGovernance = type({
 	// Runtime checks callable-ness; the precise signature is the TS-level ToolGate.
 	"gate?": type("Function").as<ToolGate>(),
@@ -44,6 +47,16 @@ export const toolGovernance = type({
 	// This tool's execute receives a `subInvoke` for governed nested tool calls
 	// (capability tools: sandboxes, delegate). Least-authority: absent = no invoker.
 	"invoker?": "true",
+	// ── authz-model facts (see src/authz/model.ts) ──
+	// Does this tool mutate state? Absent = "write" in the model (fail-closed under seeded
+	// policies). Named `access`, not `risk` — `effect.risk` is a different axis.
+	"access?": "'read' | 'write'",
+	// Action groups the model places this tool's action in (`action in Action::"<group>"`).
+	"groups?": "string[]",
+	// The resource entity type this tool acts on (Cedar `resource` type). Default "Tool".
+	"resource?": "string",
+	// Force an audit record even when the action's verb isn't otherwise audited.
+	"audit?": "boolean",
 });
 export type ToolGovernance = typeof toolGovernance.infer;
 

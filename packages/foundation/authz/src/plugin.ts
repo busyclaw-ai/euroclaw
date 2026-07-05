@@ -1,8 +1,6 @@
-// @euroclaw/policy-core — the policy-engine PORT, plus the scaffolding that turns any engine
-// into a euroclaw plugin. Engine-neutral: it speaks principal/action/resource/context (the
-// universal ABAC vocabulary), never Cedar/OPA/better-auth. Each engine package implements
-// `PolicyEngine`; this package wires it into core's gate pipeline as a cross-cutting,
-// deny-by-default before-gate.
+// The scaffolding that turns any PolicyEngine into a euroclaw plugin: a cross-cutting,
+// deny-by-default before-gate that runs `mapCall → engine.authorize → GateDecision` on every
+// matched call. Engine-neutral — it speaks PARC, never Cedar/OPA/better-auth.
 //
 // Each policy plugin declares the REQUEST CONTEXT it needs (its `Ctx`) — Cedar wants a
 // `principal`, better-auth wants `headers`. That `Ctx` is folded onto the claw's `run(prompt, ctx)`
@@ -12,40 +10,15 @@
 import type {
 	EuroclawPlugin,
 	GateDecision,
+	PolicyEngine,
+	PolicyRequest,
+	PolicyResult,
 	ToolCall,
 	TurnContext,
 } from "@euroclaw/contracts";
-import { validationError } from "@euroclaw/contracts";
+import { policyRequest, policyResult } from "@euroclaw/contracts";
+import { validationError } from "@euroclaw/errors";
 import { type } from "arktype";
-
-export const EntityRef = type({ type: "string", id: "string" });
-
-/** A reference to an entity in the policy model. Each engine formats it natively. */
-export type EntityRef = typeof EntityRef.infer;
-
-export const PolicyRequest = type({
-	principal: EntityRef,
-	action: EntityRef,
-	resource: EntityRef,
-	context: type.Record("string", "unknown"),
-});
-
-/** The universal authorization request (PARC — principal/action/resource/context). */
-export type PolicyRequest = typeof PolicyRequest.infer;
-
-export const PolicyResult = type({
-	decision: "'permit' | 'deny' | 'needs-approval'",
-	"reason?": "string | undefined",
-	"policies?": type("string").array().or("undefined"),
-});
-
-/** What an engine returns. `policies` is the determining-policy trail (for the audit). */
-export type PolicyResult = typeof PolicyResult.infer;
-
-/** The port every policy engine implements (Cedar local-WASM, better-auth, SAP remote, …). */
-export type PolicyEngine = {
-	authorize: (req: PolicyRequest) => PolicyResult | Promise<PolicyResult>;
-};
 
 /**
  * A policy plugin that declares the per-request context (`Ctx`) it needs — folded onto the
@@ -70,10 +43,9 @@ export type PolicyPluginConfig<Ctx extends Record<string, unknown>> = {
 };
 
 /**
- * Adapt any `PolicyEngine` into a euroclaw plugin: a cross-cutting before-gate that runs
- * `mapCall → engine.authorize → GateDecision` on every matched call. Engines are deny-by-default,
- * so installing this turns the agent into an allowlist; `Ctx` (inferred from `mapCall`) becomes
- * the context the caller must supply at `run`.
+ * Adapt any `PolicyEngine` into a euroclaw plugin. Engines are deny-by-default, so installing
+ * this turns the agent into an allowlist; `Ctx` (inferred from `mapCall`) becomes the context the
+ * caller must supply at `run`.
  */
 export function createPolicyPlugin<Ctx extends Record<string, unknown>>(
 	config: PolicyPluginConfig<Ctx>,
@@ -81,7 +53,7 @@ export function createPolicyPlugin<Ctx extends Record<string, unknown>>(
 	const id = config.id ?? "policy";
 	const baseMatcher = config.matcher ?? (() => true);
 	const validateRequest = (value: unknown): PolicyRequest => {
-		const valid = PolicyRequest(value);
+		const valid = policyRequest(value);
 		if (valid instanceof type.errors) {
 			throw validationError(`policy "${id}" request invalid`, valid.summary, {
 				policyId: id,
@@ -90,7 +62,7 @@ export function createPolicyPlugin<Ctx extends Record<string, unknown>>(
 		return valid;
 	};
 	const validateResult = (value: unknown): PolicyResult => {
-		const valid = PolicyResult(value);
+		const valid = policyResult(value);
 		if (valid instanceof type.errors) {
 			throw validationError(`policy "${id}" result invalid`, valid.summary, {
 				policyId: id,

@@ -11,13 +11,12 @@
 // The `auth` param is typed structurally (just `api.hasPermission`), so a real auth WITH the
 // organization plugin satisfies it, an auth WITHOUT it fails to compile, and a test stub needs no DB.
 
-import type { ToolCall } from "@euroclaw/contracts";
-import {
-	createPolicyPlugin,
-	type PolicyEngine,
-	type PolicyPlugin,
-	type PolicyRequest,
-} from "@euroclaw/policy-core";
+import { createPolicyPlugin, type PolicyPlugin } from "@euroclaw/authz";
+import type {
+	PolicyEngine,
+	PolicyRequest,
+	ToolCall,
+} from "@euroclaw/contracts";
 
 /** better-auth's request context: the incoming headers (carrying the session). */
 export type BetterAuthContext = { headers: Headers };
@@ -105,9 +104,9 @@ export function betterAuthAccessControl(
 	});
 }
 
+export type { PolicyPlugin } from "@euroclaw/authz";
+export { createPolicyPlugin } from "@euroclaw/authz";
 export type {
 	PolicyEngine,
-	PolicyPlugin,
 	PolicyRequest,
-} from "@euroclaw/policy-core";
-export { createPolicyPlugin } from "@euroclaw/policy-core";
+} from "@euroclaw/contracts";

@@ -1,0 +1,105 @@
+// buildAuthzModel — assemble the canonical authorization model from action inputs. Pure (no I/O,
+// deterministic): generators (OpenAPI/MCP extractors) and the assembly (host tools via the
+// `govern`/`tool` stamp) both feed the same builder, so a hand-registered tool is governed
+// identically to a spec-generated one — one registry, no special cases.
+
+import type {
+	ActionDef,
+	ActionGroupDef,
+	ActionSource,
+	AuthzModel,
+	EntityTypeDef,
+	JsonObject,
+	ToolGovernance,
+} from "@euroclaw/contracts";
+import { validationError } from "@euroclaw/errors";
+
+export type AuthzActionInput = {
+	/** The action id — the tool's derived address (`mcp:github:create_issue`) or the domain verb. */
+	id: string;
+	source: ActionSource;
+	/** The governance stamp — `access`/`groups`/`resource`/`audit` facts are read from it. */
+	governance?: ToolGovernance;
+	/** Policy-visible arg schema, ALREADY projected to the safe subset by the caller. */
+	args?: JsonObject;
+};
+
+export type BuildAuthzModelOptions = {
+	/** Resource entity type when the stamp declares none. Default "Tool". */
+	defaultResourceType?: string;
+	/** Pin the model version explicitly (e.g. a spec digest). Default: content hash of the model. */
+	version?: string;
+};
+
+/** The derived group for an access class — the taxonomy the seeded policies target. */
+function accessGroup(access: "read" | "write"): string {
+	return access === "read" ? "reads" : "writes";
+}
+
+/**
+ * Build the model. Fails loud on duplicate action ids. Defaults are fail-closed: an action that
+ * declares no access class is treated as a WRITE (under seeded policies: needs confirmation).
+ */
+export function buildAuthzModel(
+	inputs: readonly AuthzActionInput[],
+	options: BuildAuthzModelOptions = {},
+): AuthzModel {
+	const defaultResourceType = options.defaultResourceType ?? "Tool";
+	const seen = new Set<string>();
+	const groupIds = new Set<string>();
+	const resourceTypes = new Set<string>();
+
+	const actions: ActionDef[] = [];
+	for (const input of inputs) {
+		if (seen.has(input.id)) {
+			throw validationError("authz model invalid", "duplicate action id", {
+				actionId: input.id,
+			});
+		}
+		seen.add(input.id);
+
+		const access = input.governance?.access ?? "write";
+		const declared = input.governance?.groups ?? [];
+		const groups = [...new Set([...declared, accessGroup(access)])].sort();
+		const resourceType = input.governance?.resource ?? defaultResourceType;
+		for (const group of groups) groupIds.add(group);
+		resourceTypes.add(resourceType);
+
+		actions.push({
+			id: input.id,
+			groups,
+			resourceType,
+			...(input.args !== undefined ? { args: input.args } : {}),
+			access,
+			source: input.source,
+			...(input.governance?.audit !== undefined
+				? { audit: input.governance.audit }
+				: {}),
+		});
+	}
+
+	actions.sort((a, b) => a.id.localeCompare(b.id));
+	const groups: ActionGroupDef[] = [...groupIds]
+		.sort()
+		.map((id) => ({ id }) as ActionGroupDef);
+	const entityTypes: EntityTypeDef[] = [...resourceTypes]
+		.sort()
+		.map((type) => ({ type }) as EntityTypeDef);
+
+	const version =
+		options.version ??
+		fnv1a32(JSON.stringify({ actions, entityTypes, groups }));
+	return { version, actions, groups, entityTypes };
+}
+
+// A tiny stable content hash for the default version pin. Drift detection only (a changed model
+// must produce a changed version) — NOT cryptographic; pass `options.version` (e.g. a real spec
+// digest) when provenance matters.
+function fnv1a32(text: string): string {
+	let hash = 0x811c9dc5;
+	for (let i = 0; i < text.length; i++) {
+		hash ^= text.charCodeAt(i);
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	}
+	return hash.toString(16).padStart(8, "0");
+}

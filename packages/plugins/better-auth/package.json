@@ -23,7 +23,6 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@euroclaw/policy-better-auth": "workspace:*",
-		"@euroclaw/policy-core": "workspace:*"
+		"@euroclaw/policy-better-auth": "workspace:*"
 	}
 }

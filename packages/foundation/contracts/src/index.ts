@@ -12,7 +12,20 @@ export {
 	unsupportedOperationError,
 	validationError,
 } from "@euroclaw/errors";
-
+// ── authz protocol: the model + policy-engine port (toolkit in @euroclaw/authz, engines in
+// @euroclaw/policy-*) ──
+export type { AuthzEntity, EntityDirectory } from "./authz/directory";
+export type { PolicyEngine, PolicyEngineCapabilities } from "./authz/engine";
+export type {
+	ActionAccess,
+	ActionDef,
+	ActionGroupDef,
+	ActionSource,
+	AuthzModel,
+	EntityTypeDef,
+} from "./authz/model";
+export type { EntityRef, PolicyRequest, PolicyResult } from "./authz/request";
+export { entityRef, policyRequest, policyResult } from "./authz/request";
 // ── claws (conversational/agent-state domain) ────────────────────────────────
 export type {
 	AppendMessageInput,
@@ -97,7 +110,6 @@ export {
 	toolResultRecord,
 	toolResultStatus,
 } from "./claws/schema";
-
 // ── primitives: json + the entity schema DSL ─────────────────────────────────
 export type { JsonObject, JsonPrimitive, JsonValue } from "./common";
 export { jsonObject, jsonValue } from "./common";
@@ -196,6 +208,7 @@ export type {
 	ModelMessage,
 	ModelRunner,
 	Outcome,
+	RunMode,
 	ToolBoundary,
 	ToolCall,
 	ToolRunner,
@@ -209,12 +222,13 @@ export {
 	MEMORY_NAMESPACE_CONTEXT_KEY,
 	modelCall,
 	modelMessage,
+	TENANT_CONTEXT_KEY,
 	RESERVED_CONTEXT_PREFIX,
 	ROLE_CONTEXT_KEY,
 	RUN_ID_CONTEXT_KEY,
+	RUN_MODE_CONTEXT_KEY,
 	SUBJECT_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 	THREAD_ID_CONTEXT_KEY,
 	toolCall,
 } from "./governance/boundary";
