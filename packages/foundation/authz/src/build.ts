@@ -20,7 +20,9 @@ export type AuthzActionInput = {
 	source: ActionSource;
 	/** The governance stamp — `access`/`groups`/`resource`/`audit` facts are read from it. */
 	governance?: ToolGovernance;
-	/** Policy-visible arg schema, ALREADY projected to the safe subset by the caller. */
+	/** The action's arg schema (JSON Schema). The Cedar projection (`projectArgs`) derives the
+	 *  policy-visible subset from it at render/filter time — unprojectable constructs are opaque
+	 *  to policy, never silently mistyped. */
 	args?: JsonObject;
 };
 

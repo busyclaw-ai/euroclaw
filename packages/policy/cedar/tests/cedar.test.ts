@@ -1,3 +1,4 @@
+import { buildAuthzModel } from "@euroclaw/authz";
 import type { ToolCall } from "@euroclaw/contracts";
 import { createGovernance } from "@euroclaw/core";
 import { describe, expect, it } from "vitest";
@@ -135,5 +136,121 @@ describe("@euroclaw/policy-cedar — Cedar PDP", () => {
 			{ principal: "alice" },
 		);
 		expect(operator.status).toBe("denied"); // role != approver → no permit matches → deny-by-default
+	});
+});
+
+describe("model-driven cedar — slice 3", () => {
+	const model = buildAuthzModel([
+		{
+			id: "refund",
+			source: "tool",
+			governance: { access: "write" },
+			args: {
+				type: "object",
+				properties: {
+					amount: { type: "integer" },
+					note: { type: "string" },
+					price: { type: "number" },
+				},
+				required: ["amount"],
+			},
+		},
+		{ id: "lookup", source: "tool", governance: { access: "read" } },
+	]);
+
+	it("model + schema together fail loud", () => {
+		expect(() =>
+			cedar({
+				model,
+				schema: "entity X;",
+				policies: "permit(principal, action, resource);",
+			}),
+		).toThrow(/not both/);
+	});
+
+	it("the rendered schema parses under cedar-wasm (construction validates it)", () => {
+		expect(() =>
+			cedar({ model, policies: `permit(principal, action, resource);` }),
+		).not.toThrow();
+	});
+
+	it("policies condition on projected args; unprojected/unknown args are filtered, not fatal", async () => {
+		const core = createGovernance({
+			plugins: [
+				cedar({
+					model,
+					policies: `permit(principal, action == Action::"refund", resource) when { context.args.amount <= 500 };`,
+				}),
+			],
+			runTool: runEcho,
+		});
+
+		const small = await core.handleToolCall(
+			// price (float, unprojected) and hack (unknown) must be filtered out — with schema
+			// validation ON, their presence would otherwise fail the closed args record.
+			{
+				name: "refund",
+				args: { amount: 100, note: "ok", price: 9.99, hack: "x" },
+			},
+			{ principal: "alice" },
+		);
+		expect(small.status).toBe("ok");
+
+		const big = await core.handleToolCall(
+			{ name: "refund", args: { amount: 900 } },
+			{ principal: "alice" },
+		);
+		expect(big.status).toBe("denied");
+	});
+
+	it('group policies work at evaluation time (action in Action::"writes")', async () => {
+		const core = createGovernance({
+			plugins: [
+				cedar({
+					model,
+					policies: `
+						permit(principal, action in Action::"reads", resource);
+						permit(principal, action in Action::"writes", resource) when { context.confirmationUsed };
+					`,
+				}),
+			],
+			runTool: runEcho,
+		});
+
+		const read = await core.handleToolCall(
+			{ name: "lookup", args: {} },
+			{ principal: "alice" },
+		);
+		expect(read.status).toBe("ok");
+
+		const write = await core.handleToolCall(
+			{ name: "refund", args: { amount: 10 } },
+			{ principal: "alice" },
+		);
+		expect(write.status).toBe("needs-approval");
+	});
+
+	it("entities provider is re-read per decision — the reload seam", async () => {
+		let department = "sales";
+		const engine = cedarEngine({
+			policies: `permit(principal, action, resource) when { principal.hasTag("department") && principal.getTag("department") == "finance" };`,
+			entities: () => [
+				{
+					uid: { type: "User", id: "alice" },
+					attrs: {},
+					parents: [],
+					tags: { department },
+				},
+			],
+		});
+		const req = {
+			principal: { type: "User", id: "alice" },
+			action: { type: "Action", id: "refund" },
+			resource: { type: "Tool", id: "refund" },
+			context: { confirmationUsed: false },
+		};
+		expect((await engine.authorize(req)).decision).toBe("deny");
+		department = "finance"; // the provider's next read reflects the sync
+		expect((await engine.authorize(req)).decision).toBe("permit");
 	});
 });

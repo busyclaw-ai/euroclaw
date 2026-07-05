@@ -17,8 +17,9 @@ export type ActionAccess = "read" | "write";
 /** Where the action came from: generated from a tool definition, or hand-authored domain verb. */
 export type ActionSource = "tool" | "domain";
 
-/** One authorizable action — facts only. `args` is the PROJECTED, policy-visible subset of the
- *  tool's input schema (lossy-but-safe: policies may only condition on what projects cleanly). */
+/** One authorizable action — facts only. `args` is the action's arg schema (JSON Schema); the
+ *  Cedar projection (@euroclaw/authz `projectArgs`) renders and request-filters the policy-visible
+ *  subset from it (lossy-but-safe: policies may only condition on what projects cleanly). */
 export type ActionDef = {
 	id: string;
 	groups: readonly string[];

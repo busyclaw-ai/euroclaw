@@ -9,8 +9,13 @@ them:
   deny-by-default before-gate (`mapCall → engine.authorize → GateDecision`).
 - `buildAuthzModel` — assemble the canonical authorization model (actions, groups, entity types,
   a content-pinned version) from stamped tool definitions and hand-authored domain verbs.
+- `projectArgs` — the JSON-Schema → Cedar projection, lossy-but-safe: one walker renders the
+  policy-visible `context.args` type AND filters the runtime request to it, so schema and reality
+  never disagree. Floats/unions/refs are opaque to policy (declare policy-visible amounts as
+  integers — cents).
+- `modelToCedarSchema` / `entitiesToCedarJson` / `actionEntitiesFromModel` — the Cedar renderings
+  of the model (pure string/data generation — Cedar *validation* stays in `@euroclaw/policy-cedar`,
+  which consumes these via `cedar({ model, policies })`).
 
-Planned here (the blueprint pipeline): the shared spec-projection helpers the OpenAPI/MCP
-extractors stamp tools with (verb/hint → access, JSON-Schema → policy-visible args subset), the
-Cedar schema/entity renderings of the model (pure string generation — Cedar *validation* stays in
-`@euroclaw/policy-cedar`), starter-policy seeding, and the coverage checks behind the validate CLI.
+Planned here (the blueprint pipeline): verb/hint → access helpers for the OpenAPI/MCP extractors,
+starter-policy seeding, and the coverage checks behind the validate CLI.
