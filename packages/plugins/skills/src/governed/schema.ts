@@ -8,7 +8,7 @@ import {
 	skillProposalRecord,
 } from "../core";
 
-// Identity fields (ids, tenantId, actor refs) must be non-empty — enforced at the schema so the
+// Identity fields (ids, organizationId, actor refs) must be non-empty — enforced at the schema so the
 // API layer parses instead of re-checking each field with assertNonEmptyString.
 const nes = nonEmptyString;
 const optionalNes = nonEmptyString.or("undefined");
@@ -19,7 +19,7 @@ export const installSkillInput = type({
 	"ownerActorId?": optionalNes,
 	packageId: nes,
 	"teamId?": optionalNes,
-	tenantId: nes,
+	organizationId: nes,
 	"version?": optionalNes,
 	"visibility?": skillInstallationVisibility.or("undefined"),
 }).narrow(
@@ -31,14 +31,14 @@ export const installSkillInput = type({
 
 export const trustSkillInstallationInput = type({
 	installationId: nes,
-	tenantId: nes,
+	organizationId: nes,
 	trustedBy: nes,
 });
 
 export const enableSkillInstallationInput = type({
 	enabledBy: nes,
 	installationId: nes,
-	tenantId: nes,
+	organizationId: nes,
 });
 
 // public grants carry no principalId; every other principal type requires a non-empty one.
@@ -46,20 +46,20 @@ const grantPrincipal = type({
 	principalType: "'public'",
 	"principalId?": "undefined",
 }).or({
-	principalType: "'actor' | 'team' | 'tenant'",
+	principalType: "'actor' | 'team' | 'organization'",
 	principalId: nes,
 });
 
 export const grantActivationInput = type({
 	installationId: nes,
-	tenantId: nes,
+	organizationId: nes,
 }).and(grantPrincipal);
 
 export const requestShareInput = type({
 	installationId: nes,
 	"reason?": optionalNes,
 	requestedBy: nes,
-	tenantId: nes,
+	organizationId: nes,
 }).and(grantPrincipal);
 
 export const shareSkillInput = type({
@@ -67,7 +67,7 @@ export const shareSkillInput = type({
 	installationId: nes,
 	"reason?": optionalNes,
 	requestedBy: nes,
-	tenantId: nes,
+	organizationId: nes,
 }).and(grantPrincipal);
 
 export const shareSkillResult = type({

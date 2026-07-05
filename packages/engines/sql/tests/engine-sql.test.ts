@@ -167,7 +167,7 @@ describe("@euroclaw/engine-sql", () => {
 		expect(dead?.lastError).toBe("still broken");
 	});
 
-	it("stores runtime events and tenant-scoped idempotency responses", async () => {
+	it("stores runtime events and organization-scoped idempotency responses", async () => {
 		const store = createSqlEngineStore(memoryAdapter(), {
 			now: () => "2026-01-01T00:00:00.000Z",
 		});
@@ -187,7 +187,7 @@ describe("@euroclaw/engine-sql", () => {
 			key: "idem-1",
 			method: "POST",
 			path: "/runs",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			actor: "alice",
 			requestHash,
 			responseStatus: 202,
@@ -198,7 +198,7 @@ describe("@euroclaw/engine-sql", () => {
 			key: "idem-1",
 			method: "POST",
 			path: "/runs",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			actor: "alice",
 			requestHash,
 		});
@@ -210,7 +210,7 @@ describe("@euroclaw/engine-sql", () => {
 				key: "idem-1",
 				method: "POST",
 				path: "/runs",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 				actor: "alice",
 				requestHash: store.requestHash({ prompt: "different" }),
 				responseStatus: 202,

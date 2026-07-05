@@ -104,7 +104,7 @@ export const IdempotencyRecord = ark({
 	key: "string",
 	method: "string",
 	path: "string",
-	"tenantId?": OptionalString,
+	"organizationId?": OptionalString,
 	"actor?": OptionalString,
 	requestHash: "string",
 	responseStatus: "number",
@@ -149,7 +149,7 @@ export type IdempotencyLookup = {
 	key: string;
 	method: string;
 	path: string;
-	tenantId?: string;
+	organizationId?: string;
 	actor?: string;
 	requestHash: string;
 };
@@ -304,7 +304,7 @@ function idempotencyId(input: IdempotencyLookup): string {
 			key: input.key,
 			method: input.method,
 			path: input.path,
-			tenantId: input.tenantId ?? null,
+			organizationId: input.organizationId ?? null,
 			actor: input.actor ?? null,
 		}),
 	);
@@ -673,9 +673,9 @@ export function createSqlEngineStore(
 		},
 
 		async getIdempotency(input) {
-			// The id IS the hash of the scope tuple (key/method/path/tenantId/actor), so a primary-key
+			// The id IS the hash of the scope tuple (key/method/path/organizationId/actor), so a primary-key
 			// lookup is exactly the scoped match — and it sidesteps `WHERE col = NULL` (never true in SQL,
-			// and undefined !== null in the memory adapter) for absent tenant/actor.
+			// and undefined !== null in the memory adapter) for absent organization/actor.
 			const row = await db.findOne<unknown>({
 				model: "idempotency_key",
 				where: [{ field: "id", value: idempotencyId(input) }],
@@ -703,7 +703,7 @@ export function createSqlEngineStore(
 				key: input.key,
 				method: input.method,
 				path: input.path,
-				tenantId: input.tenantId,
+				organizationId: input.organizationId,
 				actor: input.actor,
 				requestHash: input.requestHash,
 				responseStatus: input.responseStatus,

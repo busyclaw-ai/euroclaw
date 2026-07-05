@@ -58,7 +58,7 @@ export const skillPackageSourceValues = [
 export const skillInstallationVisibilityValues = [
 	"private",
 	"team",
-	"tenant",
+	"organization",
 	"public",
 ] as const;
 export const skillInstallationStatusValues = [
@@ -72,7 +72,7 @@ export const skillInstallationStatusValues = [
 export const skillAclPrincipalTypeValues = [
 	"actor",
 	"team",
-	"tenant",
+	"organization",
 	"public",
 ] as const;
 export const skillAclPermissionValues = [
@@ -108,13 +108,13 @@ export const skillPackageSource = type(
 	"'builtin' | 'registry' | 'upload' | 'local'",
 );
 export const skillInstallationVisibility = type(
-	"'private' | 'team' | 'tenant' | 'public'",
+	"'private' | 'team' | 'organization' | 'public'",
 );
 export const skillInstallationStatus = type(
 	"'quarantined' | 'installed' | 'trusted' | 'enabled' | 'disabled' | 'archived'",
 );
 export const skillAclPrincipalType = type(
-	"'actor' | 'team' | 'tenant' | 'public'",
+	"'actor' | 'team' | 'organization' | 'public'",
 );
 export const skillAclPermission = type(
 	"'read' | 'activate' | 'manage' | 'share'",
@@ -176,7 +176,7 @@ export const skillInstallationFields = {
 	packageId: field.string({ required: true, index: true }),
 	version: field.string({ required: true, index: true }),
 	digest: field.string({ required: true, index: true }),
-	tenantId: field.string({ required: true, index: true }),
+	organizationId: field.string({ required: true, index: true }),
 	teamId: field.string({ index: true }),
 	ownerActorId: field.string({ index: true }),
 	visibility: field.enum(skillInstallationVisibilityValues, {
@@ -195,7 +195,7 @@ export const skillInstallationFields = {
 
 export const skillAclFields = {
 	id: field.string({ required: true, unique: true }),
-	tenantId: field.string({ required: true, index: true }),
+	organizationId: field.string({ required: true, index: true }),
 	installationId: field.string({
 		required: true,
 		index: true,
@@ -215,7 +215,7 @@ export const skillAclFields = {
 
 export const skillActivationFields = {
 	id: field.string({ required: true, unique: true }),
-	tenantId: field.string({ required: true, index: true }),
+	organizationId: field.string({ required: true, index: true }),
 	clawId: field.string({ required: true, index: true }),
 	threadId: field.string({ index: true }),
 	runId: field.string({ index: true }),
@@ -236,7 +236,7 @@ export const skillActivationFields = {
 
 export const skillReadFields = {
 	id: field.string({ required: true, unique: true }),
-	tenantId: field.string({ required: true, index: true }),
+	organizationId: field.string({ required: true, index: true }),
 	clawId: field.string({ index: true }),
 	threadId: field.string({ index: true }),
 	runId: field.string({ index: true }),
@@ -258,7 +258,7 @@ export const skillReadFields = {
 
 export const skillProposalFields = {
 	id: field.string({ required: true, unique: true }),
-	tenantId: field.string({ required: true, index: true }),
+	organizationId: field.string({ required: true, index: true }),
 	targetInstallationId: field.string({ index: true }),
 	proposerActorId: field.string({ required: true, index: true }),
 	kind: field.enum(skillProposalKindValues, { required: true, index: true }),

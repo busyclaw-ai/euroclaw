@@ -142,7 +142,7 @@ type TelegramName<Config> = Config extends { name: infer N extends string }
 /**
  * The Telegram channel. With a token it is the app's own bot (channels plugin) — webhook
  * verification derives from the token, so nothing else is required. Bare `telegram()` is the pure
- * transport for channelConnections: every endpoint-specific value (token, webhook secret, tenant,
+ * transport for channelConnections: every endpoint-specific value (token, webhook secret, organization,
  * defaults) resolves from the connection row via the EndpointContext. The `$poll` marker lets
  * `channels()` derive its cron requirement at compile time; the overloads keep it a literal without
  * a cast.

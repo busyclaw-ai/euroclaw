@@ -33,7 +33,7 @@ export type ChannelConnectionLookup = {
 };
 export type ChannelConnectionListFilter = {
 	provider?: string;
-	tenantId?: string;
+	organizationId?: string;
 	mode?: ChannelEndpointMode;
 	status?: ChannelConnectionStatus;
 };
@@ -104,7 +104,8 @@ function listWhere(filter: ChannelConnectionListFilter): Where[] {
 		);
 	};
 	if (filter.provider !== undefined) add("provider", filter.provider);
-	if (filter.tenantId !== undefined) add("tenantId", filter.tenantId);
+	if (filter.organizationId !== undefined)
+		add("organizationId", filter.organizationId);
 	if (filter.mode !== undefined) add("mode", filter.mode);
 	if (filter.status !== undefined) add("status", filter.status);
 	return where;

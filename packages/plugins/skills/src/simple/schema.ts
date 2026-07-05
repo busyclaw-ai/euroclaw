@@ -35,7 +35,7 @@ export const createPersonalSkillInput = type({
 	ownerActorId: nes,
 	packageId: nes,
 	"source?": "'local' | 'upload' | undefined",
-	tenantId: nes,
+	organizationId: nes,
 	version: nes,
 });
 
@@ -51,7 +51,7 @@ export const skillCatalogInput = type({
 	"publisher?": optionalNes,
 	"source?": skillPackageSource.or("undefined"),
 	"status?": skillInstallationStatus.or("undefined"),
-	"tenantId?": optionalNes,
+	"organizationId?": optionalNes,
 	"visibility?": skillInstallationVisibility.or("undefined"),
 });
 
@@ -67,7 +67,7 @@ export const skillCatalogEntry = type({
 	"source?": skillPackageSource.or("undefined"),
 	"installationId?": "string | undefined",
 	"status?": skillInstallationStatus.or("undefined"),
-	"tenantId?": "string | undefined",
+	"organizationId?": "string | undefined",
 	"version?": "string | undefined",
 	"visibility?": skillInstallationVisibility.or("undefined"),
 });

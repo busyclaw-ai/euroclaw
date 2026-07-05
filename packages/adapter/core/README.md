@@ -76,7 +76,7 @@ const client = createClawClient({ baseUrl: "/api/euroclaw" })
 
 const binding = await client.bindConversation({
   provider: "telegram",
-  tenantId: "tenant-1",
+  organizationId: "organization-1",
   externalConversationId: "chat-123",
 })
 const run = await client.run({ prompt: "Summarize this thread" })

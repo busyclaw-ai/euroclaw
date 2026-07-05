@@ -38,13 +38,13 @@ const claw = createClaw({
 })
 
 const agent = await claw.api.createClaw({
-  tenantId: "tenant-1",
+  organizationId: "organization-1",
   name: "Recruiting assistant",
 })
 
 const thread = await claw.api.createThread({
   clawId: agent.id,
-  tenantId: agent.tenantId,
+  organizationId: agent.organizationId,
 })
 
 await claw.api.sendMessage({
@@ -67,7 +67,7 @@ Channel adapters should bind a platform conversation to a durable Claw thread be
 ```ts
 const binding = await claw.api.bindConversation({
   provider: "telegram",
-  tenantId: "tenant-1",
+  organizationId: "organization-1",
   externalConversationId: "chat-123",
   externalActorId: "user-456",
   claw: { name: "Recruiting assistant" },
@@ -81,14 +81,14 @@ await claw.api.sendMessage({
 })
 ```
 
-`api.bindConversation(...)` is idempotent for `{ provider, tenantId, externalConversationId }`. If a binding exists, it returns the existing Claw and thread; otherwise it creates the missing Claw/thread and stores the binding.
+`api.bindConversation(...)` is idempotent for `{ provider, organizationId, externalConversationId }`. If a binding exists, it returns the existing Claw and thread; otherwise it creates the missing Claw/thread and stores the binding.
 
 Channel integrations should also track endpoint/poller state with the channel endpoint APIs:
 
 ```ts
 await claw.api.upsertChannelEndpoint({
   provider: "telegram",
-  tenantId: "tenant-1",
+  organizationId: "organization-1",
   endpointKey: "default",
   mode: "poll",
   cursor: { offset: 100 },
@@ -96,7 +96,7 @@ await claw.api.upsertChannelEndpoint({
 
 await claw.api.updateChannelEndpoint({
   provider: "telegram",
-  tenantId: "tenant-1",
+  organizationId: "organization-1",
   endpointKey: "default",
   patch: {
     status: "validated",

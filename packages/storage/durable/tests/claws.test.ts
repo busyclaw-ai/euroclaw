@@ -13,14 +13,14 @@ async function seedClawAndThread(adapter: Adapter = memoryAdapter()) {
 	const claws = store(adapter);
 	const claw = await claws.claws.create({
 		id: "claw-1",
-		tenantId: "tenant-1",
+		organizationId: "organization-1",
 		teamId: "team-1",
 		context: { locale: "en" },
 	});
 	const thread = await claws.threads.create({
 		id: "thread-1",
 		clawId: claw.id,
-		tenantId: claw.tenantId,
+		organizationId: claw.organizationId,
 		teamId: claw.teamId,
 		title: "Inbox",
 	});
@@ -63,7 +63,11 @@ describe("createClawsStore", () => {
 
 		// A plain variable (not a fresh literal) so the extra `priority` isn't rejected by the base
 		// CreateClawInput type — the store's typed contract stays base; extra fields are runtime.
-		const input = { id: "claw-x", tenantId: "tenant-1", priority: 5 };
+		const input = {
+			id: "claw-x",
+			organizationId: "organization-1",
+			priority: 5,
+		};
 		const created = await claws.claws.create(input);
 
 		// returned straight from create…
@@ -85,7 +89,7 @@ describe("createClawsStore", () => {
 			},
 		});
 		await expect(
-			claws.claws.create({ id: "claw-y", tenantId: "tenant-1" }),
+			claws.claws.create({ id: "claw-y", organizationId: "organization-1" }),
 		).rejects.toThrow(/create claw input invalid/);
 	});
 
@@ -225,11 +229,14 @@ describe("createClawsStore", () => {
 		const claws = createClawsStore(memoryAdapter(), {
 			now: () => `2026-01-01T00:00:0${tick++}.000Z`,
 		});
-		await claws.claws.create({ id: "claw-1", tenantId: "tenant-1" });
+		await claws.claws.create({
+			id: "claw-1",
+			organizationId: "organization-1",
+		});
 		await claws.threads.create({
 			id: "thread-1",
 			clawId: "claw-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 		});
 
 		await claws.checkpoints.create({

@@ -76,9 +76,9 @@ export type SkillsApi = SimpleSkillsApi & {
 			input: CreateSkillInstallationInput,
 		) => Promise<SkillInstallationRecord>;
 		get: (input: { id: string }) => Promise<SkillInstallationRecord | null>;
-		listForTenant: (input: {
+		listForOrganization: (input: {
 			status?: SkillInstallationStatus;
-			tenantId: string;
+			organizationId: string;
 			visibility?: SkillInstallationVisibility;
 		}) => Promise<SkillInstallationRecord[]>;
 		updateStatus: (input: {
@@ -96,7 +96,7 @@ export type SkillsApi = SimpleSkillsApi & {
 			permission?: SkillAclPermission;
 			principalId?: string;
 			principalType: SkillAclPrincipalType;
-			tenantId: string;
+			organizationId: string;
 		}) => Promise<SkillAclRecord[]>;
 	};
 	activations: {
@@ -114,9 +114,9 @@ export type SkillsApi = SimpleSkillsApi & {
 	proposals: {
 		create: (input: CreateSkillProposalInput) => Promise<SkillProposalRecord>;
 		get: (input: { id: string }) => Promise<SkillProposalRecord | null>;
-		listForTenant: (input: {
+		listForOrganization: (input: {
 			status?: SkillProposalStatus;
-			tenantId: string;
+			organizationId: string;
 		}) => Promise<SkillProposalRecord[]>;
 		updateStatus: (input: {
 			id: string;

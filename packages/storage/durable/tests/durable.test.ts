@@ -110,7 +110,7 @@ describe("createPiiMappingStore", () => {
 			kind: "email",
 			memoryNamespace: "memory-a",
 			subjectId: "u1",
-			tenantId: "tenant-a",
+			organizationId: "organization-a",
 			createdAt: "2026-01-01T00:00:00Z",
 		});
 		await store.save({
@@ -119,7 +119,7 @@ describe("createPiiMappingStore", () => {
 			kind: "email",
 			memoryNamespace: "memory-b",
 			subjectId: "u2",
-			tenantId: "tenant-b",
+			organizationId: "organization-b",
 			createdAt: "2026-01-01T00:00:00Z",
 		});
 		await store.save({
@@ -128,7 +128,7 @@ describe("createPiiMappingStore", () => {
 			kind: "email",
 			memoryNamespace: "memory-a",
 			subjectId: "u1",
-			tenantId: "tenant-b",
+			organizationId: "organization-b",
 			createdAt: "2026-01-01T00:00:00Z",
 		});
 
@@ -136,37 +136,37 @@ describe("createPiiMappingStore", () => {
 			await store.resolve("{{pii:abc}}", {
 				memoryNamespace: "memory-a",
 				subjectId: "u1",
-				tenantId: "tenant-a",
+				organizationId: "organization-a",
 			}),
 		).toBe("alice@example.com");
 		expect(
 			await store.resolve("{{pii:abc}}", {
 				memoryNamespace: "memory-b",
 				subjectId: "u2",
-				tenantId: "tenant-b",
+				organizationId: "organization-b",
 			}),
 		).toBe("bob@example.com");
 		expect(await store.resolve("{{pii:abc}}")).toBeNull();
-		await store.deleteForSubject("u1", { tenantId: "tenant-a" });
+		await store.deleteForSubject("u1", { organizationId: "organization-a" });
 		expect(
 			await store.resolve("{{pii:abc}}", {
 				memoryNamespace: "memory-a",
 				subjectId: "u1",
-				tenantId: "tenant-a",
+				organizationId: "organization-a",
 			}),
 		).toBeNull();
 		expect(
 			await store.resolve("{{pii:abc}}", {
 				memoryNamespace: "memory-b",
 				subjectId: "u2",
-				tenantId: "tenant-b",
+				organizationId: "organization-b",
 			}),
 		).toBe("bob@example.com");
 		expect(
 			await store.resolve("{{pii:abc}}", {
 				memoryNamespace: "memory-a",
 				subjectId: "u1",
-				tenantId: "tenant-b",
+				organizationId: "organization-b",
 			}),
 		).toBe("carol@example.com");
 	});

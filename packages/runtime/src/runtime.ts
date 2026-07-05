@@ -41,7 +41,7 @@ import {
 	composeContext,
 	type IdentityResolver,
 	type MembershipResolver,
-	type TenantResolver,
+	type OrganizationResolver,
 } from "./context";
 import {
 	createRuntimeEvent,
@@ -96,7 +96,7 @@ export type RuntimeConfig = {
 	tools?: ToolSet;
 	system?: string;
 	redactor?: Redactor;
-	tenant?: TenantResolver;
+	organization?: OrganizationResolver;
 	identity?: IdentityResolver;
 	membership?: MembershipResolver;
 	audit?: AuditSink;
@@ -402,7 +402,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 	const resolveContext = composeContext({
 		identity: config.identity,
 		membership: config.membership,
-		tenant: config.tenant,
+		organization: config.organization,
 	});
 	const modelTools = modelFacingTools(tools);
 	const catalog = createToolCatalog(toolEntriesFromToolSet(tools));

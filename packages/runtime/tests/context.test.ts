@@ -1,8 +1,8 @@
 import {
 	ACTOR_CONTEXT_KEY,
 	type ContextResolver,
+	ORGANIZATION_CONTEXT_KEY,
 	ROLE_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 } from "@euroclaw/contracts";
 import { memoryAdapter } from "@euroclaw/storage-core";
 import { createTeamStore } from "@euroclaw/storage-durable";
@@ -49,11 +49,13 @@ describe("runtime context", () => {
 		expect(ctx[ROLE_CONTEXT_KEY]).toBe("approver");
 	});
 
-	it("resolves tenant through a trusted resolver", async () => {
+	it("resolves organization through a trusted resolver", async () => {
 		const resolve = resolverFor({
-			tenant: () => "tenant-1",
+			organization: () => "organization-1",
 		});
 
-		expect((await resolve({}))[TENANT_CONTEXT_KEY]).toBe("tenant-1");
+		expect((await resolve({}))[ORGANIZATION_CONTEXT_KEY]).toBe(
+			"organization-1",
+		);
 	});
 });

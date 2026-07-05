@@ -1,7 +1,7 @@
 import {
 	CLAW_ID_CONTEXT_KEY,
+	ORGANIZATION_CONTEXT_KEY,
 	RUN_ID_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 	THREAD_ID_CONTEXT_KEY,
 	type TurnContext,
 } from "@euroclaw/contracts";
@@ -14,7 +14,7 @@ import type {
 import type { ActiveSkillRef, SkillManifest } from "./contracts";
 import { hasActivationGrant } from "./grants";
 import { assertSkillManifest } from "./manifest";
-import { parseInstallationRef, parseTenantRef } from "./refs";
+import { parseInstallationRef, parseOrganizationRef } from "./refs";
 import type { activeSkillResolution } from "./schema";
 
 type ActiveSkillResolution = typeof activeSkillResolution.infer;
@@ -81,17 +81,17 @@ async function resolveStoredSkillByInstallation(input: {
 	installationId: string;
 	ref: ActiveSkillRef;
 	store: SkillsStore;
-	tenantId: string | undefined;
+	organizationId: string | undefined;
 }): Promise<ActiveSkillResolution> {
 	const installation = await input.store.installations.get(
 		input.installationId,
 	);
 	if (!installation) return { status: "missing", ref: input.ref };
 	if (
-		input.tenantId === undefined ||
-		installation.tenantId !== input.tenantId
+		input.organizationId === undefined ||
+		installation.organizationId !== input.organizationId
 	) {
-		return { status: "tenant_required", ref: input.ref };
+		return { status: "organization_required", ref: input.ref };
 	}
 	if (!statusAllowsActivation(installation)) {
 		return { status: "unavailable", ref: input.ref };
@@ -113,19 +113,19 @@ async function resolveStoredSkillByInstallation(input: {
 	return { status: "ok", manifest: manifestFromPackage(pkg), ref: input.ref };
 }
 
-async function resolveStoredSkillByTenantRef(input: {
+async function resolveStoredSkillByOrganizationRef(input: {
 	ctx: TurnContext;
-	ref: { skillId: string; tenantId: string };
+	ref: { skillId: string; organizationId: string };
 	store: SkillsStore;
 }): Promise<ActiveSkillResolution> {
 	let forbidden = false;
-	const trusted = await input.store.installations.listForTenant({
+	const trusted = await input.store.installations.listForOrganization({
 		status: "trusted",
-		tenantId: input.ref.tenantId,
+		organizationId: input.ref.organizationId,
 	});
-	const enabled = await input.store.installations.listForTenant({
+	const enabled = await input.store.installations.listForOrganization({
 		status: "enabled",
-		tenantId: input.ref.tenantId,
+		organizationId: input.ref.organizationId,
 	});
 	for (const installation of [...enabled, ...trusted]) {
 		const pkg = await packageForInstallation({
@@ -162,11 +162,12 @@ export async function resolveActiveSkill(input: {
 		const manifest = input.skillById.get(input.ref);
 		if (manifest) return { status: "ok", manifest, ref: input.ref };
 		if (!input.store) return { status: "missing", ref: input.ref };
-		const tenantId = contextString(input.ctx, TENANT_CONTEXT_KEY);
-		if (!tenantId) return { status: "tenant_required", ref: input.ref };
-		return resolveStoredSkillByTenantRef({
+		const organizationId = contextString(input.ctx, ORGANIZATION_CONTEXT_KEY);
+		if (!organizationId)
+			return { status: "organization_required", ref: input.ref };
+		return resolveStoredSkillByOrganizationRef({
 			ctx: input.ctx,
-			ref: { skillId: input.ref, tenantId },
+			ref: { skillId: input.ref, organizationId },
 			store: input.store,
 		});
 	}
@@ -178,17 +179,20 @@ export async function resolveActiveSkill(input: {
 			installationId: installationRef.installationId,
 			ref: input.ref,
 			store: input.store,
-			tenantId: contextString(input.ctx, TENANT_CONTEXT_KEY),
+			organizationId: contextString(input.ctx, ORGANIZATION_CONTEXT_KEY),
 		});
 	}
-	const tenantRef = parseTenantRef(input.ref);
-	if (!tenantRef) return { status: "missing", ref: input.ref };
-	if (contextString(input.ctx, TENANT_CONTEXT_KEY) !== tenantRef.tenantId) {
-		return { status: "tenant_required", ref: input.ref };
+	const organizationRef = parseOrganizationRef(input.ref);
+	if (!organizationRef) return { status: "missing", ref: input.ref };
+	if (
+		contextString(input.ctx, ORGANIZATION_CONTEXT_KEY) !==
+		organizationRef.organizationId
+	) {
+		return { status: "organization_required", ref: input.ref };
 	}
-	return resolveStoredSkillByTenantRef({
+	return resolveStoredSkillByOrganizationRef({
 		ctx: input.ctx,
-		ref: tenantRef,
+		ref: organizationRef,
 		store: input.store,
 	});
 }
@@ -203,8 +207,9 @@ function activationMatchesContext(
 	record: SkillActivationRecord,
 	ctx: TurnContext,
 ): boolean {
-	const tenantId = contextString(ctx, TENANT_CONTEXT_KEY);
-	if (tenantId === undefined || record.tenantId !== tenantId) return false;
+	const organizationId = contextString(ctx, ORGANIZATION_CONTEXT_KEY);
+	if (organizationId === undefined || record.organizationId !== organizationId)
+		return false;
 	const clawId = contextString(ctx, CLAW_ID_CONTEXT_KEY);
 	if (clawId !== undefined && record.clawId !== clawId) return false;
 	const threadId = contextString(ctx, THREAD_ID_CONTEXT_KEY);

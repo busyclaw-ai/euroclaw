@@ -11,7 +11,7 @@ describe("runtime model egress policy", () => {
 		"retries a run only after a policy exception is visible to the model boundary gate",
 	);
 	it.todo(
-		"scopes model-egress exceptions by tenant, provider, model, and redacted prompt hash",
+		"scopes model-egress exceptions by organization, provider, model, and redacted prompt hash",
 	);
 	it.todo(
 		"never treats a model-egress exception as a direct runtime resume approval",

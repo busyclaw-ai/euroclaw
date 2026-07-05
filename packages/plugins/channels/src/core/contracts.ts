@@ -58,7 +58,7 @@ export type EndpointContext = {
 	cursor?: JsonValue;
 	/**
 	 * Bind defaults for conversations on this endpoint — set by channelConnections from the row
-	 * (tenant on `claw.tenantId`). The app's own bots carry none: conversations create bare personal
+	 * (organization on `claw.organizationId`). The app's own bots carry none: conversations create bare personal
 	 * claws, and hosts that want placement pre-bind through the public bindConversation api.
 	 */
 	claw?: BindConversationClawInput;

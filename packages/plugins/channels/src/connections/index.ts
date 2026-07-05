@@ -1,5 +1,5 @@
 // @euroclaw/channels/connections — user-registered bots (the SSO analog): hosts let their users
-// bring their OWN bots at runtime. Credentials live in the channel_connection row, the tenant they
+// bring their OWN bots at runtime. Credentials live in the channel_connection row, the organization they
 // belong to is row data (the organizationId analog), and every connection gets its own webhook URL.
 export {
 	type ChannelConnectionsApi,

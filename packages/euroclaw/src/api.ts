@@ -499,18 +499,21 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 						clawId: claw.id,
 						ownerActorId: args.thread?.ownerActorId ?? args.externalActorId,
 						teamId: args.thread?.teamId ?? claw.teamId,
-						tenantId: claw.tenantId,
+						organizationId: claw.organizationId,
 					});
 
-			if (thread.clawId !== claw.id || thread.tenantId !== claw.tenantId) {
+			if (
+				thread.clawId !== claw.id ||
+				thread.organizationId !== claw.organizationId
+			) {
 				throw validationError(
 					"bind conversation input invalid",
-					"thread does not match conversation claw or tenant",
+					"thread does not match conversation claw or organization",
 					{
 						clawId: claw.id,
-						clawTenantId: claw.tenantId,
+						clawOrganizationId: claw.organizationId,
 						threadClawId: thread.clawId,
-						threadTenantId: thread.tenantId,
+						threadOrganizationId: thread.organizationId,
 					},
 				);
 			}

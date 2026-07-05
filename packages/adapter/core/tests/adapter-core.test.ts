@@ -14,14 +14,17 @@ describe("@euroclaw/adapter-core", () => {
 		const handler = toRequestHandler(claw);
 		const post = await handler(
 			new Request("https://app.test/api/euroclaw/create-claw", {
-				body: JSON.stringify({ id: "claw-1", tenantId: "tenant-1" }),
+				body: JSON.stringify({
+					id: "claw-1",
+					organizationId: "organization-1",
+				}),
 				method: "POST",
 			}),
 		);
 
 		expect(post.status).toBe(200);
 		await expect(post.json()).resolves.toMatchObject({
-			data: { id: "claw-1", tenantId: "tenant-1" },
+			data: { id: "claw-1", organizationId: "organization-1" },
 			ok: true,
 		});
 		const get = await handler(

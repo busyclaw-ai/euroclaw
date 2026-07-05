@@ -10,13 +10,13 @@ import {
 async function createAgentThread(claw: ReturnType<typeof createClaw>) {
 	const agent = await claw.api.createClaw({
 		id: "claw-1",
-		tenantId: "tenant-1",
+		organizationId: "organization-1",
 		name: "Recruiting assistant",
 	});
 	const thread = await claw.api.createThread({
 		id: "thread-1",
 		clawId: agent.id,
-		tenantId: agent.tenantId,
+		organizationId: agent.organizationId,
 		title: "Candidate Alice",
 	});
 	return { agent, thread };

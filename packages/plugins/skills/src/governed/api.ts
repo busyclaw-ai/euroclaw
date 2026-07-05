@@ -110,12 +110,12 @@ async function requireInstallation(input: {
 	installationId: string;
 	label: string;
 	store: SkillsStore;
-	tenantId: string;
+	organizationId: string;
 }): Promise<SkillInstallationRecord> {
 	const installation = await input.store.installations.get(
 		input.installationId,
 	);
-	if (!installation || installation.tenantId !== input.tenantId) {
+	if (!installation || installation.organizationId !== input.organizationId) {
 		throw validationError(input.label, "installation not found");
 	}
 	return installation;
@@ -129,7 +129,7 @@ async function createShareProposal(input: {
 		installationId: input.share.installationId,
 		label: "request share input invalid",
 		store: input.store,
-		tenantId: input.share.tenantId,
+		organizationId: input.share.organizationId,
 	});
 	return input.store.proposals.create({
 		kind: "share",
@@ -148,7 +148,7 @@ async function createShareProposal(input: {
 				: {}),
 		},
 		targetInstallationId: installation.id,
-		tenantId: input.share.tenantId,
+		organizationId: input.share.organizationId,
 	});
 }
 
@@ -160,14 +160,14 @@ async function grantShare(input: {
 		installationId: input.share.installationId,
 		label: "share skill input invalid",
 		store: input.store,
-		tenantId: input.share.tenantId,
+		organizationId: input.share.organizationId,
 	});
 	return input.store.acl.grant({
 		installationId: installation.id,
 		permission: "activate",
 		principalId: input.share.principalId,
 		principalType: input.share.principalType,
-		tenantId: input.share.tenantId,
+		organizationId: input.share.organizationId,
 	});
 }
 
@@ -190,7 +190,7 @@ export function createGovernedSkillsApi(
 				packageId: pkg.packageId,
 				status: valid.initialStatus ?? "installed",
 				teamId: valid.teamId,
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 				version: pkg.version,
 				visibility: valid.visibility,
 			});
@@ -201,7 +201,7 @@ export function createGovernedSkillsApi(
 				installationId: valid.installationId,
 				label: "trust skill installation input invalid",
 				store: resolvedStore(),
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 			});
 			if (
 				installation.status !== "installed" &&
@@ -232,7 +232,7 @@ export function createGovernedSkillsApi(
 				installationId: valid.installationId,
 				label: "enable skill installation input invalid",
 				store: resolvedStore(),
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 			});
 			if (installation.status !== "trusted") {
 				throw validationError(
@@ -260,14 +260,14 @@ export function createGovernedSkillsApi(
 				installationId: valid.installationId,
 				label: "grant activation input invalid",
 				store: resolvedStore(),
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 			});
 			return resolvedStore().acl.grant({
 				installationId: valid.installationId,
 				permission: "activate",
 				principalId: valid.principalId,
 				principalType: valid.principalType,
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 			});
 		},
 		async requestShare(input) {
@@ -314,8 +314,8 @@ export function createGovernedSkillsApi(
 		installations: {
 			create: (input) => resolvedStore().installations.create(input),
 			get: ({ id }) => resolvedStore().installations.get(id),
-			listForTenant: (input) =>
-				resolvedStore().installations.listForTenant(input),
+			listForOrganization: (input) =>
+				resolvedStore().installations.listForOrganization(input),
 			updateStatus: ({ id, patch }) =>
 				resolvedStore().installations.updateStatus(id, patch),
 		},
@@ -341,7 +341,8 @@ export function createGovernedSkillsApi(
 		proposals: {
 			create: (input) => resolvedStore().proposals.create(input),
 			get: ({ id }) => resolvedStore().proposals.get(id),
-			listForTenant: (input) => resolvedStore().proposals.listForTenant(input),
+			listForOrganization: (input) =>
+				resolvedStore().proposals.listForOrganization(input),
 			updateStatus: ({ id, patch }) =>
 				resolvedStore().proposals.updateStatus(id, patch),
 		},

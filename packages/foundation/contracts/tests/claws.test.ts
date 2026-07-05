@@ -15,7 +15,7 @@ describe("euroclaw core — durable Claw contracts", () => {
 	it("validates the durable claw/thread/message/tool record shapes", () => {
 		const claw = clawRecord({
 			id: "claw-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "active",
 			context: { locale: "en" },
 			createdAt: "2026-01-01T00:00:00.000Z",
@@ -24,7 +24,7 @@ describe("euroclaw core — durable Claw contracts", () => {
 		const thread = threadRecord({
 			id: "thread-1",
 			clawId: "claw-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "active",
 			currentSequence: 0,
 			createdAt: "2026-01-01T00:00:00.000Z",
@@ -130,7 +130,7 @@ describe("euroclaw core — durable Claw contracts", () => {
 
 	it("derives create input and storage schema from the entity fields", () => {
 		const input = createClawInput({
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			name: "Recruiting claw",
 		});
 

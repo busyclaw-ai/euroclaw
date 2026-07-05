@@ -54,9 +54,9 @@ export const clawFields = {
 	// around them, and the storage layer rejects an update that touches them).
 	id: field.string({ required: true, unique: true, immutable: true }),
 	// Tenancy is opt-in, not core-required (better-auth: the user table has no org column; tenancy
-	// arrives with the organization plugin). Hosts that partition by tenant set it; a personal claw
+	// arrives with the organization plugin). Hosts that partition by organization set it; a personal claw
 	// may carry only its owner.
-	tenantId: field.string({ index: true, immutable: true }),
+	organizationId: field.string({ index: true, immutable: true }),
 	teamId: field.string({ index: true, immutable: true }),
 	ownerActorId: field.string({ index: true, immutable: true }),
 	status: field.enum(clawStatusValues, { required: true }),
@@ -77,8 +77,8 @@ export const threadFields = {
 		immutable: true,
 		references: { model: "claw", field: "id" },
 	}),
-	// Follows the claw's (optional) tenancy — see clawFields.tenantId.
-	tenantId: field.string({ index: true, immutable: true }),
+	// Follows the claw's (optional) tenancy — see clawFields.organizationId.
+	organizationId: field.string({ index: true, immutable: true }),
 	teamId: field.string({ index: true, immutable: true }),
 	ownerActorId: field.string({ index: true, immutable: true }),
 	title: field.string(),
@@ -183,10 +183,10 @@ export const checkpointFields = {
 } as const;
 
 export const conversationBindingFields = {
-	// The account-table analog (better-auth keys accounts by providerId + accountId, with no tenant in
+	// The account-table analog (better-auth keys accounts by providerId + accountId, with no organization in
 	// the key): the BOT scopes external conversation ids — telegram DM chat ids repeat across bots — so
 	// the natural key is (provider, endpointKey, externalConversationId). Whose data a conversation is
-	// lives on the claw the binding points at (claw.tenantId), not here.
+	// lives on the claw the binding points at (claw.organizationId), not here.
 	id: field.string({ required: true, unique: true }),
 	provider: field.string({ required: true, index: true }),
 	endpointKey: field.string({ required: true, index: true }),
@@ -303,7 +303,7 @@ export const bindConversationClawInput = createClawInput;
 export const bindConversationThreadInputOptions = {
 	omit: [
 		"clawId",
-		"tenantId",
+		"organizationId",
 		"status",
 		"currentMessageId",
 		"currentSequence",

@@ -3,11 +3,11 @@ import {
 	type ApprovalStore,
 	type Detector,
 	MEMORY_NAMESPACE_CONTEXT_KEY,
+	ORGANIZATION_CONTEXT_KEY,
 	type PiiMapping,
 	type PiiMappingStore,
 	type PiiSpan,
 	SUBJECT_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 } from "@euroclaw/contracts";
 import { describe, expect, it } from "vitest";
 import {
@@ -136,7 +136,7 @@ describe("euroclaw governance — the neutral pipeline", () => {
 		expect(JSON.stringify(entries)).not.toContain("alice@personal.com");
 	});
 
-	it("passes trusted subject and tenant context into redaction", async () => {
+	it("passes trusted subject and organization context into redaction", async () => {
 		const saved: PiiMapping[] = [];
 		const mappings: PiiMappingStore = {
 			save: (mapping) => {
@@ -153,7 +153,7 @@ describe("euroclaw governance — the neutral pipeline", () => {
 				...ctx,
 				[MEMORY_NAMESPACE_CONTEXT_KEY]: "memory-1",
 				[SUBJECT_CONTEXT_KEY]: "subject-1",
-				[TENANT_CONTEXT_KEY]: "tenant-1",
+				[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 			}),
 		});
 
@@ -162,7 +162,7 @@ describe("euroclaw governance — the neutral pipeline", () => {
 		expect(saved[0]).toMatchObject({
 			memoryNamespace: "memory-1",
 			subjectId: "subject-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 		});
 	});
 

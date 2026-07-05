@@ -1,7 +1,7 @@
 // Isolation hardening — CROSS-EXECUTION ISOLATION: one execution cannot affect the next. Each test
 // deliberately shares ONE provider instance across two executes; the guarantee under test is that a
 // FRESH guest context per execute prevents any state (globals, prototypes, filesystem) from leaking
-// between them. A leak here is one tenant's script reading or corrupting another's — [P0-if-fails].
+// between them. A leak here is one organization's script reading or corrupting another's — [P0-if-fails].
 //
 // I4 (whether the host CAN intentionally persist fs across executes) is a report-only investigation,
 // not a pass/fail property — its findings live in the suite report, not in an assertion here.

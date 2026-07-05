@@ -2,7 +2,7 @@
 	"name": "@euroclaw/channels",
 	"version": "0.0.0",
 	"type": "module",
-	"description": "Channels for euroclaw: the app's own bots via channels() (one shared bot per provider, declared in code), user-registered bots via channelConnections() (credentials in the row, per-tenant), and first-party providers on subpaths.",
+	"description": "Channels for euroclaw: the app's own bots via channels() (one shared bot per provider, declared in code), user-registered bots via channelConnections() (credentials in the row, per-organization), and first-party providers on subpaths.",
 	"license": "MIT",
 	"author": "Konstantin Ponomarev",
 	"homepage": "https://github.com/euroclaw-sh/euroclaw#readme",

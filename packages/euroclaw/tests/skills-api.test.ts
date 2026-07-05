@@ -27,7 +27,7 @@ describe("createClaw plugin APIs", () => {
 					activationContext: {
 						activatedBy: "actor-1",
 						teamId: "team-1",
-						tenantId: "tenant-1",
+						organizationId: "organization-1",
 					},
 					active: [summarizeSkill.id],
 					skills: [summarizeSkill],
@@ -51,7 +51,7 @@ describe("createClaw plugin APIs", () => {
 			status: "enabled",
 			version: pkg.version,
 			digest: pkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			visibility: "team",
 		});
 		expect(
@@ -60,7 +60,7 @@ describe("createClaw plugin APIs", () => {
 				permission: "activate",
 				principalId: "team-1",
 				principalType: "team",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			}),
 		).toMatchObject({ permission: "activate" });
 		expect(
@@ -108,12 +108,12 @@ describe("createClaw plugin APIs", () => {
 			database: db,
 			model: approvalToolModel(),
 			redactor,
-			tenant: () => "tenant-1",
+			organization: () => "organization-1",
 			plugins: [
 				governedSkillsPlugin({
 					activationContext: {
 						activatedBy: "actor-1",
-						tenantId: "tenant-1",
+						organizationId: "organization-1",
 					},
 					skills: [],
 				}),
@@ -132,12 +132,12 @@ describe("createClaw plugin APIs", () => {
 		});
 		await claw.api.createClaw({
 			id: "claw-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 		});
 		await claw.api.createThread({
 			id: "thread-1",
 			clawId: "claw-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 		});
 
 		const pkg = await claw.api.skills.packages.create({
@@ -157,15 +157,15 @@ describe("createClaw plugin APIs", () => {
 			packageId: pkg.packageId,
 			version: pkg.version,
 			digest: pkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "enabled",
 		});
 		await claw.api.skills.acl.grant({
 			installationId: "install-email",
 			permission: "activate",
-			principalId: "tenant-1",
-			principalType: "tenant",
-			tenantId: "tenant-1",
+			principalId: "organization-1",
+			principalType: "organization",
+			organizationId: "organization-1",
 		});
 		await claw.api.skills.activate({
 			clawId: "claw-1",

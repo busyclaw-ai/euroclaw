@@ -8,8 +8,8 @@ import type { EntityRecord } from "../entity";
 import { entity, field } from "../entity";
 import {
 	MEMORY_NAMESPACE_CONTEXT_KEY,
+	ORGANIZATION_CONTEXT_KEY,
 	SUBJECT_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 	type TurnContext,
 } from "./boundary";
 
@@ -52,7 +52,7 @@ export const piiMappingFields = {
 	original: field.string({ required: true, pii: "contains" }),
 	kind: field.enum(piiKindValues, { required: true, index: true }),
 	subjectId: field.string({ index: true }),
-	tenantId: field.string({ index: true }),
+	organizationId: field.string({ index: true }),
 	memoryNamespace: field.string({ index: true }),
 	createdAt: field.string({ required: true }),
 } as const;
@@ -74,13 +74,13 @@ export type PiiMappingStore = {
 	) => string | null | Promise<string | null>;
 	deleteForSubject: (
 		subjectId: string,
-		ctx?: Pick<RedactionContext, "tenantId">,
+		ctx?: Pick<RedactionContext, "organizationId">,
 	) => void | Promise<void>;
 };
 
 export const redactionContext = type({
 	"subjectId?": "string | undefined",
-	"tenantId?": "string | undefined",
+	"organizationId?": "string | undefined",
 	"memoryNamespace?": "string | undefined",
 });
 export type RedactionContext = typeof redactionContext.infer;
@@ -92,16 +92,16 @@ export function redactionContextFrom(
 	ctx: TurnContext,
 ): RedactionContext | undefined {
 	const subjectId = ctx[SUBJECT_CONTEXT_KEY];
-	const tenantId = ctx[TENANT_CONTEXT_KEY];
+	const organizationId = ctx[ORGANIZATION_CONTEXT_KEY];
 	const memoryNamespace = ctx[MEMORY_NAMESPACE_CONTEXT_KEY];
 	const out: RedactionContext = {};
 	if (typeof subjectId === "string") out.subjectId = subjectId;
-	if (typeof tenantId === "string") out.tenantId = tenantId;
+	if (typeof organizationId === "string") out.organizationId = organizationId;
 	if (typeof memoryNamespace === "string") {
 		out.memoryNamespace = memoryNamespace;
 	}
 	return out.subjectId === undefined &&
-		out.tenantId === undefined &&
+		out.organizationId === undefined &&
 		out.memoryNamespace === undefined
 		? undefined
 		: out;

@@ -1,8 +1,8 @@
 import {
 	ACTOR_CONTEXT_KEY,
 	configurationError,
+	ORGANIZATION_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 	type TurnContext,
 	validationError,
 } from "@euroclaw/contracts";
@@ -187,7 +187,7 @@ function activationTurnContext(input: ActivateSkillContext): TurnContext {
 	return {
 		[ACTOR_CONTEXT_KEY]: input.activatedBy,
 		...(input.teamId !== undefined ? { [TEAM_CONTEXT_KEY]: input.teamId } : {}),
-		[TENANT_CONTEXT_KEY]: input.tenantId,
+		[ORGANIZATION_CONTEXT_KEY]: input.organizationId,
 	};
 }
 
@@ -195,7 +195,7 @@ function readTurnContext(input: ReadSkillContext): TurnContext {
 	return {
 		[ACTOR_CONTEXT_KEY]: input.readBy,
 		...(input.teamId !== undefined ? { [TEAM_CONTEXT_KEY]: input.teamId } : {}),
-		[TENANT_CONTEXT_KEY]: input.tenantId,
+		[ORGANIZATION_CONTEXT_KEY]: input.organizationId,
 	};
 }
 
@@ -212,7 +212,7 @@ async function assertActivatableInstallation(input: {
 	);
 	if (
 		!installation ||
-		installation.tenantId !== input.activationContext.tenantId
+		installation.organizationId !== input.activationContext.organizationId
 	) {
 		throw validationError(
 			"activate skill input invalid",
@@ -258,7 +258,7 @@ export async function createReadRecord(input: {
 	readBy: string;
 	skillId: string;
 	store: SkillsStore;
-	tenantId: string;
+	organizationId: string;
 	version?: string;
 }): Promise<SkillReadRecord> {
 	return input.store.reads.create({
@@ -270,7 +270,7 @@ export async function createReadRecord(input: {
 		runId: input.read.runId,
 		skillId: input.skillId,
 		source: input.read.source ?? "user",
-		tenantId: input.tenantId,
+		organizationId: input.organizationId,
 		threadId: input.read.threadId,
 		version: input.version,
 	});
@@ -282,7 +282,7 @@ async function readInstalledSkill(input: {
 	readContext: ReadSkillContext;
 	store: SkillsStore;
 }): Promise<ReadSkillResult> {
-	if (input.installation.tenantId !== input.readContext.tenantId) {
+	if (input.installation.organizationId !== input.readContext.organizationId) {
 		throw validationError("read skill input invalid", "installation not found");
 	}
 	if (!statusAllowsActivation(input.installation)) {
@@ -321,7 +321,7 @@ async function readInstalledSkill(input: {
 		readBy: input.readContext.readBy,
 		skillId: resolved.manifest.id,
 		store: input.store,
-		tenantId: input.installation.tenantId,
+		organizationId: input.installation.organizationId,
 		version: resolved.pkg.version,
 	});
 	return assertReadSkillResult({
@@ -340,10 +340,10 @@ async function readInstalledSkillById(input: {
 	store: SkillsStore;
 }): Promise<ReadSkillResult> {
 	if (
-		input.read.tenantId !== undefined &&
-		input.read.tenantId !== input.readContext.tenantId
+		input.read.organizationId !== undefined &&
+		input.read.organizationId !== input.readContext.organizationId
 	) {
-		throw validationError("read skill input invalid", "tenant mismatch");
+		throw validationError("read skill input invalid", "organization mismatch");
 	}
 	if (input.read.installationId !== undefined) {
 		const installation = await input.store.installations.get(
@@ -368,9 +368,9 @@ async function readInstalledSkillById(input: {
 	}
 	let sawMatchingSkill = false;
 	for (const status of ["enabled", "trusted"] as const) {
-		const installations = await input.store.installations.listForTenant({
+		const installations = await input.store.installations.listForOrganization({
 			status,
-			tenantId: input.readContext.tenantId,
+			organizationId: input.readContext.organizationId,
 		});
 		for (const installation of installations) {
 			const resolved = await packageAndManifestForInstallation({
@@ -394,7 +394,7 @@ async function readInstalledSkillById(input: {
 					readBy: input.readContext.readBy,
 					skillId: resolved.manifest.id,
 					store: input.store,
-					tenantId: installation.tenantId,
+					organizationId: installation.organizationId,
 					version: resolved.pkg.version,
 				});
 				return assertReadSkillResult({
@@ -418,10 +418,10 @@ async function installedCatalogEntries(input: {
 	catalog: SkillCatalogInput;
 	store: SkillsStore | undefined;
 }): Promise<SkillCatalogEntry[]> {
-	if (!input.store || input.catalog.tenantId === undefined) return [];
-	const installations = await input.store.installations.listForTenant({
+	if (!input.store || input.catalog.organizationId === undefined) return [];
+	const installations = await input.store.installations.listForOrganization({
 		status: input.catalog.status,
-		tenantId: input.catalog.tenantId,
+		organizationId: input.catalog.organizationId,
 		visibility: input.catalog.visibility,
 	});
 	const out: SkillCatalogEntry[] = [];
@@ -456,7 +456,7 @@ async function installedCatalogEntries(input: {
 				publisher: resolved.pkg.publisher,
 				source: resolved.pkg.source,
 				status: installation.status,
-				tenantId: installation.tenantId,
+				organizationId: installation.organizationId,
 				version: resolved.pkg.version,
 				visibility: installation.visibility,
 			}),
@@ -500,7 +500,7 @@ export function createSimpleSkillsApi(
 							readBy: readContext.readBy,
 							skillId: staticManifest.id,
 							store,
-							tenantId: readContext.tenantId,
+							organizationId: readContext.organizationId,
 						});
 					}
 					return assertReadSkillResult({
@@ -537,7 +537,7 @@ export function createSimpleSkillsApi(
 				ownerActorId: valid.ownerActorId,
 				packageId: pkg.packageId,
 				status: "enabled",
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 				version: pkg.version,
 				visibility: "private",
 			});
@@ -546,14 +546,14 @@ export function createSimpleSkillsApi(
 				permission: "activate",
 				principalId: valid.ownerActorId,
 				principalType: "actor",
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 			});
 			const readGrant = await resolvedStore().acl.grant({
 				installationId: installation.id,
 				permission: "read",
 				principalId: valid.ownerActorId,
 				principalType: "actor",
-				tenantId: valid.tenantId,
+				organizationId: valid.organizationId,
 			});
 			return assertCreatePersonalSkillResult({
 				grant,
@@ -581,7 +581,7 @@ export function createSimpleSkillsApi(
 				runId: valid.runId,
 				skillId: manifest.id,
 				source: valid.source ?? "user",
-				tenantId: activationContext.tenantId,
+				organizationId: activationContext.organizationId,
 				threadId: valid.threadId,
 			});
 		},

@@ -39,7 +39,7 @@ describe("createSkillsStore", () => {
 			packageId: pkg.packageId,
 			version: pkg.version,
 			digest: pkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			teamId: "team-1",
 			ownerActorId: "actor-1",
 		});
@@ -54,15 +54,15 @@ describe("createSkillsStore", () => {
 			}),
 		).toMatchObject({ status: "trusted", trustedBy: "admin-1" });
 		expect(
-			await store.installations.listForTenant({
+			await store.installations.listForOrganization({
 				status: "trusted",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			}),
 		).toHaveLength(1);
 
 		const acl = await store.acl.grant({
 			id: "acl-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			installationId: "install-1",
 			principalType: "team",
 			principalId: "team-1",
@@ -74,13 +74,13 @@ describe("createSkillsStore", () => {
 				permission: "activate",
 				principalId: "team-1",
 				principalType: "team",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			}),
 		).toMatchObject([{ id: "acl-1" }]);
 
 		const activation = await store.activations.create({
 			id: "activation-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			clawId: "claw-1",
 			threadId: "thread-1",
 			runId: "run-1",
@@ -97,7 +97,7 @@ describe("createSkillsStore", () => {
 
 		const read = await store.reads.create({
 			id: "read-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			clawId: "claw-1",
 			threadId: "thread-1",
 			runId: "run-1",
@@ -119,7 +119,7 @@ describe("createSkillsStore", () => {
 
 		const proposal = await store.proposals.create({
 			id: "proposal-1",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			targetInstallationId: "install-1",
 			proposerActorId: "actor-1",
 			kind: "patch",

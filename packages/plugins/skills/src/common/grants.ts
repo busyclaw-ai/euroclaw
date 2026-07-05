@@ -1,7 +1,7 @@
 import {
 	ACTOR_CONTEXT_KEY,
+	ORGANIZATION_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 	type TurnContext,
 } from "@euroclaw/contracts";
 import type {
@@ -15,7 +15,7 @@ function contextString(ctx: TurnContext, key: string): string | undefined {
 	return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-// Grant resolution: does the actor (or its team / tenant / a public grant) hold `permission` on the
+// Grant resolution: does the actor (or its team / organization / a public grant) hold `permission` on the
 // installation? Shared by active-skill resolution (the gate) and the governed lifecycle API.
 export async function hasSkillGrant(input: {
 	ctx: TurnContext;
@@ -23,8 +23,11 @@ export async function hasSkillGrant(input: {
 	permission: SkillAclPermission;
 	store: SkillsStore;
 }): Promise<boolean> {
-	const tenantId = contextString(input.ctx, TENANT_CONTEXT_KEY);
-	if (tenantId === undefined || tenantId !== input.installation.tenantId) {
+	const organizationId = contextString(input.ctx, ORGANIZATION_CONTEXT_KEY);
+	if (
+		organizationId === undefined ||
+		organizationId !== input.installation.organizationId
+	) {
 		return false;
 	}
 	const actorId = contextString(input.ctx, ACTOR_CONTEXT_KEY);
@@ -33,7 +36,7 @@ export async function hasSkillGrant(input: {
 			permission: input.permission,
 			principalId: actorId,
 			principalType: "actor",
-			tenantId,
+			organizationId,
 		});
 		if (
 			actorGrants.some(
@@ -49,7 +52,7 @@ export async function hasSkillGrant(input: {
 			permission: input.permission,
 			principalId: teamId,
 			principalType: "team",
-			tenantId,
+			organizationId,
 		});
 		if (
 			teamGrants.some((grant) => grant.installationId === input.installation.id)
@@ -57,21 +60,23 @@ export async function hasSkillGrant(input: {
 			return true;
 		}
 	}
-	const tenantGrants = await input.store.acl.listForPrincipal({
+	const organizationGrants = await input.store.acl.listForPrincipal({
 		permission: input.permission,
-		principalId: tenantId,
-		principalType: "tenant",
-		tenantId,
+		principalId: organizationId,
+		principalType: "organization",
+		organizationId,
 	});
 	if (
-		tenantGrants.some((grant) => grant.installationId === input.installation.id)
+		organizationGrants.some(
+			(grant) => grant.installationId === input.installation.id,
+		)
 	) {
 		return true;
 	}
 	const publicGrants = await input.store.acl.listForPrincipal({
 		permission: input.permission,
 		principalType: "public",
-		tenantId,
+		organizationId,
 	});
 	return publicGrants.some(
 		(grant) => grant.installationId === input.installation.id,

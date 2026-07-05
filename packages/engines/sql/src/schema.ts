@@ -78,7 +78,7 @@ export const idempotencyFields = {
 	key: field.string({ required: true, index: true }),
 	method: field.string({ required: true }),
 	path: field.string({ required: true }),
-	tenantId: field.string({ index: true }),
+	organizationId: field.string({ index: true }),
 	actor: field.string({ index: true }),
 	requestHash: field.string({ required: true }),
 	responseStatus: field.number({ required: true }),

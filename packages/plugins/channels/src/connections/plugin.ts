@@ -82,7 +82,7 @@ const WEBHOOK_PATH = "/channels/:provider/connections/:endpointKey/webhook";
 /**
  * The channelConnections plugin — user-registered bots, the SSO analog: hosts let their users bring
  * their OWN bots at runtime. Credentials live in the channel_connection row (read back at use), the
- * tenant they belong to is row data (the organizationId analog), and conversations bind under the
+ * organization they belong to is row data (the organizationId analog), and conversations bind under the
  * row's claw defaults. Providers are the same Channel transports the channels plugin uses — pass them
  * config-light (e.g. `telegram()`), everything endpoint-specific resolves from the row.
  */
@@ -146,7 +146,9 @@ function buildPlugin(
 	): BindConversationClawInput | undefined => {
 		const merged = {
 			...row.claw,
-			...(row.tenantId !== undefined ? { tenantId: row.tenantId } : {}),
+			...(row.organizationId !== undefined
+				? { organizationId: row.organizationId }
+				: {}),
 		};
 		if (Object.keys(merged).length === 0) return undefined;
 		const valid = bindConversationClawInput(merged);

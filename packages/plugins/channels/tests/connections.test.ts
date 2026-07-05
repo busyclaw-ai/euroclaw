@@ -79,13 +79,13 @@ describe("createChannelConnectionsStore", () => {
 			mode: "webhook",
 			secret: "token-1",
 			webhookSecret: "hook-1",
-			tenantId: "org-acme",
+			organizationId: "org-acme",
 		});
 		expect(first).toMatchObject({
 			id: endpointId({ provider: "telegram", endpointKey: "acme-bot" }),
 			status: "active",
 			secret: "token-1",
-			tenantId: "org-acme",
+			organizationId: "org-acme",
 		});
 
 		// re-registration is the trust grant: rotate credentials, stay one row
@@ -115,21 +115,21 @@ describe("createChannelConnectionsStore", () => {
 		expect(restored.status).toBe("active");
 	});
 
-	it("lists by tenant — the organizationId-style link", async () => {
+	it("lists by organization — the organizationId-style link", async () => {
 		const store = createChannelConnectionsStore(db(), { now });
 		await store.register({
 			provider: "telegram",
 			endpointKey: "acme-bot",
 			mode: "webhook",
-			tenantId: "org-acme",
+			organizationId: "org-acme",
 		});
 		await store.register({
 			provider: "telegram",
 			endpointKey: "globex-bot",
 			mode: "webhook",
-			tenantId: "org-globex",
+			organizationId: "org-globex",
 		});
-		const acme = await store.list({ tenantId: "org-acme" });
+		const acme = await store.list({ organizationId: "org-acme" });
 		expect(acme.map((row) => row.endpointKey)).toEqual(["acme-bot"]);
 	});
 });
@@ -228,7 +228,7 @@ describe("channelConnections plugin", () => {
 			endpointKey: "acme-bot",
 			mode: "webhook",
 			webhookSecret: "hook-1",
-			tenantId: "org-acme",
+			organizationId: "org-acme",
 			claw: { name: "Acme bot" },
 		});
 		const route = plugin.routes?.[0];
@@ -248,13 +248,13 @@ describe("channelConnections plugin", () => {
 		});
 		expect(ok.status).toBe(200);
 		expect(recorded.relayed).toEqual(["hello"]);
-		// the row's tenant + claw defaults drove the bind — tenancy never touched transport identity,
+		// the row's organization + claw defaults drove the bind — tenancy never touched transport identity,
 		// and the binding key is namespaced so it can never collide with an app bot's
 		expect(recorded.binds).toMatchObject([
 			{
 				provider: "fake",
 				endpointKey: "connections/acme-bot",
-				claw: { tenantId: "org-acme", name: "Acme bot" },
+				claw: { organizationId: "org-acme", name: "Acme bot" },
 			},
 		]);
 	});
@@ -326,7 +326,7 @@ describe("channelConnections plugin", () => {
 			endpointKey: "db-bot",
 			mode: "poll",
 			secret: "bot-token-abc",
-			tenantId: "org-acme",
+			organizationId: "org-acme",
 		});
 		const cron = plugin.cron?.[0];
 		if (!cron) throw new Error("expected the connections poll cron");
@@ -347,7 +347,7 @@ describe("channelConnections plugin", () => {
 		expect(second).toMatchObject({ processed: 0, status: "idle" });
 	});
 
-	it("binds tenantless connections fine — tenancy is opt-in row data", async () => {
+	it("binds organizationless connections fine — tenancy is opt-in row data", async () => {
 		const recorded = { binds: [] as unknown[], relayed: [] as string[] };
 		const plugin = configured(channelConnections([fakeChannel()]));
 		const api = plugin.api?.({}) as {

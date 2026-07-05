@@ -41,9 +41,9 @@ export type ReadSkillContextResolver = (
 ) => ReadSkillContext | Promise<ReadSkillContext>;
 
 export type SkillsApiOptions = {
-	/** Trusted activation principal/tenant. Not read from ActivateSkillInput. */
+	/** Trusted activation principal/organization. Not read from ActivateSkillInput. */
 	activationContext?: ActivateSkillContext | ActivateSkillContextResolver;
-	/** Trusted read principal/tenant. Not read from ReadSkillInput. */
+	/** Trusted read principal/organization. Not read from ReadSkillInput. */
 	readContext?: ReadSkillContext | ReadSkillContextResolver;
 	/** Static manifests contributed by composition; catalog only exposes compact metadata. */
 	staticSkills?: readonly SkillManifest[];
@@ -71,9 +71,9 @@ export type SkillsPluginConfig<
 		| "recorded"
 		| readonly (SkillId<Skills> | ActiveSkillRef)[]
 		| ActiveSkillResolver;
-	/** Trusted principal/tenant for claw.api.skills.activate. */
+	/** Trusted principal/organization for claw.api.skills.activate. */
 	activationContext?: SkillsApiOptions["activationContext"];
-	/** Trusted principal/tenant for claw.api.skills.read. */
+	/** Trusted principal/organization for claw.api.skills.read. */
 	readContext?: SkillsApiOptions["readContext"];
 	/** The allowed-tools gate is sealed by default. */
 	sealed?: boolean;

@@ -5,9 +5,9 @@
 import {
 	ACTOR_CONTEXT_KEY,
 	type ContextResolver,
+	ORGANIZATION_CONTEXT_KEY,
 	ROLE_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 	type TurnContext,
 } from "@euroclaw/contracts";
 
@@ -24,8 +24,8 @@ export type MembershipResolver = (
 	ctx: TurnContext,
 ) => Membership | undefined | Promise<Membership | undefined>;
 
-/** Resolves the tenant boundary for durable resources and PII mapping scopes. */
-export type TenantResolver = (
+/** Resolves the organization boundary for durable resources and PII mapping scopes. */
+export type OrganizationResolver = (
 	ctx: TurnContext,
 ) => string | undefined | Promise<string | undefined>;
 
@@ -64,14 +64,15 @@ export function roleMembership(deps: {
 export function composeContext(parts: {
 	identity?: IdentityResolver;
 	membership?: MembershipResolver;
-	tenant?: TenantResolver;
+	organization?: OrganizationResolver;
 }): ContextResolver | undefined {
-	const { identity, membership, tenant } = parts;
-	if (!identity && !membership && !tenant) return undefined;
+	const { identity, membership, organization } = parts;
+	if (!identity && !membership && !organization) return undefined;
 	return async (ctx) => {
-		if (tenant) {
-			const tenantId = await tenant(ctx);
-			if (typeof tenantId === "string") ctx[TENANT_CONTEXT_KEY] = tenantId;
+		if (organization) {
+			const organizationId = await organization(ctx);
+			if (typeof organizationId === "string")
+				ctx[ORGANIZATION_CONTEXT_KEY] = organizationId;
 		}
 		if (identity) {
 			const actor = await identity(ctx);

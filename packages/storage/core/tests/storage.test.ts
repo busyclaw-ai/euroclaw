@@ -180,9 +180,9 @@ const fieldSchema = {
 		modelName: "euroclaw_claw",
 		fields: {
 			id: { type: "string", required: true, unique: true },
-			tenantId: {
+			organizationId: {
 				type: "string",
-				fieldName: "tenant_id",
+				fieldName: "organization_id",
 				required: true,
 			},
 			status: {
@@ -209,7 +209,7 @@ const fieldSchema = {
 
 type FieldClaw = {
 	id: string;
-	tenantId: string;
+	organizationId: string;
 	status: string;
 	context: unknown;
 	updatedAt: string;
@@ -224,7 +224,7 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 
 		const created = await db.create<FieldClaw>({
 			model: "claw",
-			data: { id: "c1", tenantId: "t1", secret: "hidden", locked: "v1" },
+			data: { id: "c1", organizationId: "t1", secret: "hidden", locked: "v1" },
 		});
 
 		expect(created).toEqual({
@@ -232,24 +232,24 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 			id: "c1",
 			locked: "v1",
 			status: "active",
-			tenantId: "t1",
+			organizationId: "t1",
 			updatedAt: "created",
 		});
 
 		const row = await raw.findOne<Record<string, unknown>>({
 			model: "euroclaw_claw",
-			where: [{ field: "tenant_id", value: "t1" }],
+			where: [{ field: "organization_id", value: "t1" }],
 		});
 		expect(row).toMatchObject({
 			context: JSON.stringify({ source: "default" }),
 			id: "c1",
 			secret: "hidden",
-			tenant_id: "t1",
+			organization_id: "t1",
 		});
 
 		const found = await db.findOne<FieldClaw>({
 			model: "claw",
-			where: [{ field: "tenantId", value: "t1" }],
+			where: [{ field: "organizationId", value: "t1" }],
 		});
 		expect(found).toEqual(created);
 	});
@@ -257,34 +257,34 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 	it("maps select, sort, count, and update fields", async () => {
 		const raw = memoryAdapter();
 		const db = schemaAdapter(raw, fieldSchema);
-		await db.create({ model: "claw", data: { id: "c2", tenantId: "b" } });
-		await db.create({ model: "claw", data: { id: "c3", tenantId: "a" } });
+		await db.create({ model: "claw", data: { id: "c2", organizationId: "b" } });
+		await db.create({ model: "claw", data: { id: "c3", organizationId: "a" } });
 
 		const selected = await db.findOne<Partial<FieldClaw>>({
 			model: "claw",
-			select: ["tenantId", "context"],
+			select: ["organizationId", "context"],
 			where: [{ field: "id", value: "c2" }],
 		});
 		expect(selected).toEqual({
 			context: { source: "default" },
-			tenantId: "b",
+			organizationId: "b",
 		});
 
 		const sorted = await db.findMany<FieldClaw>({
 			model: "claw",
-			sortBy: { field: "tenantId", direction: "asc" },
+			sortBy: { field: "organizationId", direction: "asc" },
 		});
-		expect(sorted.map((row) => row.tenantId)).toEqual(["a", "b"]);
+		expect(sorted.map((row) => row.organizationId)).toEqual(["a", "b"]);
 		expect(
 			await db.count({
 				model: "claw",
-				where: [{ field: "tenantId", value: "a" }],
+				where: [{ field: "organizationId", value: "a" }],
 			}),
 		).toBe(1);
 
 		const updated = await db.update<FieldClaw>({
 			model: "claw",
-			where: [{ field: "tenantId", value: "a" }],
+			where: [{ field: "organizationId", value: "a" }],
 			update: { context: { patched: true } },
 		});
 		expect(updated?.context).toEqual({ patched: true });
@@ -292,7 +292,7 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 
 		const row = await raw.findOne<Record<string, unknown>>({
 			model: "euroclaw_claw",
-			where: [{ field: "tenant_id", value: "a" }],
+			where: [{ field: "organization_id", value: "a" }],
 		});
 		expect(row?.context).toBe(JSON.stringify({ patched: true }));
 		expect(row?.updatedAt).toBe("updated");
@@ -300,7 +300,10 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 
 	it("lets explicit update values win over onUpdate", async () => {
 		const db = schemaAdapter(memoryAdapter(), fieldSchema);
-		await db.create({ model: "claw", data: { id: "c4", tenantId: "t4" } });
+		await db.create({
+			model: "claw",
+			data: { id: "c4", organizationId: "t4" },
+		});
 
 		const updated = await db.update<FieldClaw>({
 			model: "claw",
@@ -315,12 +318,12 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 		const db = schemaAdapter(memoryAdapter(), fieldSchema);
 
 		await expect(
-			db.create({ model: "claw", data: { id: "missing-tenant" } }),
-		).rejects.toThrow(/tenantId.*required/);
+			db.create({ model: "claw", data: { id: "missing-organization" } }),
+		).rejects.toThrow(/organizationId.*required/);
 		await expect(
 			db.create({
 				model: "claw",
-				data: { id: "bad-field", tenantId: "t", unknown: true },
+				data: { id: "bad-field", organizationId: "t", unknown: true },
 			}),
 		).rejects.toThrow(/unknown field/);
 		await expect(
@@ -333,7 +336,7 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 		await expect(
 			db.create({
 				model: "claw",
-				data: { context: () => undefined, id: "bad-json", tenantId: "t" },
+				data: { context: () => undefined, id: "bad-json", organizationId: "t" },
 			}),
 		).rejects.toThrow(/JSON-serializable/);
 	});
@@ -343,7 +346,10 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 		const db = schemaAdapter(raw, fieldSchema);
 
 		await db.transaction?.(async (tx) => {
-			await tx.create({ model: "claw", data: { id: "tx1", tenantId: "t" } });
+			await tx.create({
+				model: "claw",
+				data: { id: "tx1", organizationId: "t" },
+			});
 		});
 
 		expect(await raw.count({ model: "euroclaw_claw" })).toBe(1);
@@ -351,7 +357,7 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 			db.transaction?.(async (tx) => {
 				await tx.create({
 					model: "claw",
-					data: { id: "tx2", tenantId: "t" },
+					data: { id: "tx2", organizationId: "t" },
 				});
 				throw new Error("rollback");
 			}),
@@ -367,15 +373,18 @@ describe("@euroclaw/storage-core — schema adapter", () => {
 	it("maps consumeOne and decodes the returned row", async () => {
 		const raw = memoryAdapter();
 		const db = schemaAdapter(raw, fieldSchema);
-		await db.create({ model: "claw", data: { id: "consume", tenantId: "t" } });
+		await db.create({
+			model: "claw",
+			data: { id: "consume", organizationId: "t" },
+		});
 
 		const consumed = await db.consumeOne<FieldClaw>({
 			model: "claw",
-			where: [{ field: "tenantId", value: "t" }],
+			where: [{ field: "organizationId", value: "t" }],
 		});
 
 		expect(consumed?.context).toEqual({ source: "default" });
-		expect(consumed?.tenantId).toBe("t");
+		expect(consumed?.organizationId).toBe("t");
 		expect(await raw.count({ model: "euroclaw_claw" })).toBe(0);
 	});
 });

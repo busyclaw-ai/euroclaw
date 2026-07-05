@@ -1,9 +1,9 @@
 import {
 	ACTOR_CONTEXT_KEY,
 	CLAW_ID_CONTEXT_KEY,
+	ORGANIZATION_CONTEXT_KEY,
 	RUN_ID_CONTEXT_KEY,
 	TEAM_CONTEXT_KEY,
-	TENANT_CONTEXT_KEY,
 	THREAD_ID_CONTEXT_KEY,
 } from "@euroclaw/contracts";
 import { createGovernance, createMemoryAudit } from "@euroclaw/core";
@@ -141,7 +141,7 @@ describe("@euroclaw/skills (simple)", () => {
 		const api = createSimpleSkillsApi(createSkillsStore(db()), {
 			readContext: {
 				readBy: "actor-1",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			},
 		});
 		const personal = await api.createPersonal({
@@ -153,7 +153,7 @@ describe("@euroclaw/skills (simple)", () => {
 			},
 			ownerActorId: "actor-1",
 			packageId: "actor-1.read-personal",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			version: "1.0.0",
 		});
 		expect(personal.installation).toMatchObject({
@@ -187,7 +187,7 @@ describe("@euroclaw/skills (simple)", () => {
 				runId: "run-1",
 				skillId: "read-personal",
 				source: "user",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 				threadId: "thread-1",
 			},
 		});
@@ -200,7 +200,7 @@ describe("@euroclaw/skills (simple)", () => {
 		const api = createSimpleSkillsApi(store, {
 			activationContext: {
 				activatedBy: "actor-1",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			},
 		});
 		const personal = await api.createPersonal({
@@ -212,7 +212,7 @@ describe("@euroclaw/skills (simple)", () => {
 			},
 			ownerActorId: "actor-1",
 			packageId: "actor-1.email-only",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			version: "1.0.0",
 		});
 
@@ -233,7 +233,7 @@ describe("@euroclaw/skills (simple)", () => {
 		const api = createSimpleSkillsApi(createSkillsStore(db()), {
 			activationContext: {
 				activatedBy: "actor-1",
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			},
 		});
 		const personal = await api.createPersonal({
@@ -245,7 +245,7 @@ describe("@euroclaw/skills (simple)", () => {
 			},
 			ownerActorId: "actor-2",
 			packageId: "actor-2.email-only",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			version: "1.0.0",
 		});
 
@@ -254,7 +254,7 @@ describe("@euroclaw/skills (simple)", () => {
 				activatedBy: "actor-2",
 				clawId: "claw-1",
 				installationId: personal.installation.id,
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			} as never),
 		).rejects.toThrow(/actor cannot activate this skill/);
 	});
@@ -298,7 +298,7 @@ describe("@euroclaw/skills (simple)", () => {
 			],
 			resolveContext: (ctx) => ({
 				...ctx,
-				[TENANT_CONTEXT_KEY]: "tenant-1",
+				[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 			}),
 			runTool: () => {
 				ran = true;
@@ -433,7 +433,7 @@ describe("@euroclaw/skills (simple)", () => {
 			now: () => "2026-01-01T00:00:00.000Z",
 		});
 		const pkg = await store.packages.create({
-			id: "pkg-tenant-email",
+			id: "pkg-organization-email",
 			packageId: "team.email-only",
 			version: "1.0.0",
 			digest: "sha256:email",
@@ -449,15 +449,15 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: pkg.packageId,
 			version: pkg.version,
 			digest: pkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "enabled",
 		});
 		await store.acl.grant({
 			installationId: installation.id,
 			permission: "activate",
-			principalId: "tenant-1",
-			principalType: "tenant",
-			tenantId: "tenant-1",
+			principalId: "organization-1",
+			principalType: "organization",
+			organizationId: "organization-1",
 		});
 		const ec = createGovernance({
 			plugins: [
@@ -470,7 +470,7 @@ describe("@euroclaw/skills (simple)", () => {
 			],
 			resolveContext: (ctx) => ({
 				...ctx,
-				[TENANT_CONTEXT_KEY]: "tenant-1",
+				[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 			}),
 			runTool: () => {
 				ran = true;
@@ -484,11 +484,11 @@ describe("@euroclaw/skills (simple)", () => {
 		expect(ran).toBe(true);
 	});
 
-	it("permits database-backed skills through actor, team, tenant, and public ACL grants", async () => {
+	it("permits database-backed skills through actor, team, organization, and public ACL grants", async () => {
 		for (const principalType of [
 			"actor",
 			"team",
-			"tenant",
+			"organization",
 			"public",
 		] as const) {
 			const store = createSkillsStore(db());
@@ -508,7 +508,7 @@ describe("@euroclaw/skills (simple)", () => {
 				packageId: pkg.packageId,
 				version: pkg.version,
 				digest: pkg.digest,
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 				status: "enabled",
 			});
 			await store.acl.grant({
@@ -516,9 +516,11 @@ describe("@euroclaw/skills (simple)", () => {
 				permission: "activate",
 				...(principalType === "actor" ? { principalId: "actor-1" } : {}),
 				...(principalType === "team" ? { principalId: "team-1" } : {}),
-				...(principalType === "tenant" ? { principalId: "tenant-1" } : {}),
+				...(principalType === "organization"
+					? { principalId: "organization-1" }
+					: {}),
 				principalType,
-				tenantId: "tenant-1",
+				organizationId: "organization-1",
 			});
 			const ec = createGovernance({
 				plugins: [
@@ -533,7 +535,7 @@ describe("@euroclaw/skills (simple)", () => {
 					...ctx,
 					[ACTOR_CONTEXT_KEY]: "actor-1",
 					[TEAM_CONTEXT_KEY]: "team-1",
-					[TENANT_CONTEXT_KEY]: "tenant-1",
+					[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 				}),
 			});
 
@@ -562,7 +564,7 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: foreignPkg.packageId,
 			version: foreignPkg.version,
 			digest: foreignPkg.digest,
-			tenantId: "tenant-2",
+			organizationId: "organization-2",
 			status: "enabled",
 		});
 		const unscopedPkg = await store.packages.create({
@@ -581,7 +583,7 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: unscopedPkg.packageId,
 			version: unscopedPkg.version,
 			digest: unscopedPkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "enabled",
 		});
 		const pkg = await store.packages.create({
@@ -600,15 +602,15 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: pkg.packageId,
 			version: pkg.version,
 			digest: pkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "enabled",
 		});
 		await store.acl.grant({
 			installationId: installation.id,
 			permission: "activate",
-			principalId: "tenant-1",
-			principalType: "tenant",
-			tenantId: "tenant-1",
+			principalId: "organization-1",
+			principalType: "organization",
+			organizationId: "organization-1",
 		});
 		await store.activations.create({
 			activatedBy: "actor-2",
@@ -618,7 +620,7 @@ describe("@euroclaw/skills (simple)", () => {
 			runId: "run-1",
 			skillId: "foreign-email",
 			source: "user",
-			tenantId: "tenant-2",
+			organizationId: "organization-2",
 			threadId: "thread-2",
 		});
 		await store.activations.create({
@@ -629,7 +631,7 @@ describe("@euroclaw/skills (simple)", () => {
 			runId: "run-1",
 			skillId: "unscoped-email",
 			source: "user",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 		});
 		await store.activations.create({
 			activatedBy: "actor-1",
@@ -639,7 +641,7 @@ describe("@euroclaw/skills (simple)", () => {
 			runId: "run-1",
 			skillId: "email-only",
 			source: "user",
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			threadId: "thread-1",
 		});
 		const ec = createGovernance({
@@ -648,7 +650,7 @@ describe("@euroclaw/skills (simple)", () => {
 				...ctx,
 				[CLAW_ID_CONTEXT_KEY]: "claw-1",
 				[RUN_ID_CONTEXT_KEY]: "run-1",
-				[TENANT_CONTEXT_KEY]: "tenant-1",
+				[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 				[THREAD_ID_CONTEXT_KEY]: "thread-1",
 			}),
 			runTool: () => {
@@ -663,7 +665,7 @@ describe("@euroclaw/skills (simple)", () => {
 		expect(ran).toBe(true);
 	});
 
-	it("resolves tenant refs past unauthorized matching installations", async () => {
+	it("resolves organization refs past unauthorized matching installations", async () => {
 		const store = createSkillsStore(db());
 		const firstPkg = await store.packages.create({
 			packageId: "team.first-email",
@@ -681,7 +683,7 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: firstPkg.packageId,
 			version: firstPkg.version,
 			digest: firstPkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "enabled",
 		});
 		const secondPkg = await store.packages.create({
@@ -700,15 +702,15 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: secondPkg.packageId,
 			version: secondPkg.version,
 			digest: secondPkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "enabled",
 		});
 		await store.acl.grant({
 			installationId: secondInstallation.id,
 			permission: "activate",
-			principalId: "tenant-1",
-			principalType: "tenant",
-			tenantId: "tenant-1",
+			principalId: "organization-1",
+			principalType: "organization",
+			organizationId: "organization-1",
 		});
 		const ec = createGovernance({
 			plugins: [
@@ -721,7 +723,7 @@ describe("@euroclaw/skills (simple)", () => {
 			],
 			resolveContext: (ctx) => ({
 				...ctx,
-				[TENANT_CONTEXT_KEY]: "tenant-1",
+				[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 			}),
 		});
 
@@ -748,7 +750,7 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: pkg.packageId,
 			version: pkg.version,
 			digest: pkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "enabled",
 		});
 		const ec = createGovernance({
@@ -762,7 +764,7 @@ describe("@euroclaw/skills (simple)", () => {
 			],
 			resolveContext: (ctx) => ({
 				...ctx,
-				[TENANT_CONTEXT_KEY]: "tenant-1",
+				[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 			}),
 		});
 
@@ -774,13 +776,13 @@ describe("@euroclaw/skills (simple)", () => {
 		});
 	});
 
-	it("denies database-backed skills without tenant context", async () => {
+	it("denies database-backed skills without organization context", async () => {
 		const store = createSkillsStore(db());
 		const ec = createGovernance({
 			plugins: [
 				skillsPlugin({
 					enforceAllowedTools: true,
-					active: [{ skillId: "email-only", tenantId: "tenant-1" }],
+					active: [{ skillId: "email-only", organizationId: "organization-1" }],
 					skills: [],
 					store,
 				}),
@@ -790,7 +792,7 @@ describe("@euroclaw/skills (simple)", () => {
 		await expect(
 			ec.handleToolCall({ name: "send_email", args: {} }),
 		).resolves.toMatchObject({
-			reasonCode: "ACTIVE_SKILL_TENANT_REQUIRED",
+			reasonCode: "ACTIVE_SKILL_ORGANIZATION_REQUIRED",
 			status: "denied",
 		});
 	});
@@ -814,7 +816,7 @@ describe("@euroclaw/skills (simple)", () => {
 			packageId: pkg.packageId,
 			version: pkg.version,
 			digest: pkg.digest,
-			tenantId: "tenant-1",
+			organizationId: "organization-1",
 			status: "installed",
 		});
 		const ec = createGovernance({
@@ -828,7 +830,7 @@ describe("@euroclaw/skills (simple)", () => {
 			],
 			resolveContext: (ctx) => ({
 				...ctx,
-				[TENANT_CONTEXT_KEY]: "tenant-1",
+				[ORGANIZATION_CONTEXT_KEY]: "organization-1",
 			}),
 		});
 

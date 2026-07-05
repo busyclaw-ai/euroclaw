@@ -249,7 +249,7 @@ export function createSkillsStore(
 					packageId: valid.packageId,
 					version: valid.version,
 					digest: valid.digest,
-					tenantId: valid.tenantId,
+					organizationId: valid.organizationId,
 					teamId: valid.teamId,
 					ownerActorId: valid.ownerActorId,
 					visibility: valid.visibility ?? "private",
@@ -270,8 +270,10 @@ export function createSkillsStore(
 				});
 			},
 
-			listForTenant(input) {
-				const where: Where[] = [{ field: "tenantId", value: input.tenantId }];
+			listForOrganization(input) {
+				const where: Where[] = [
+					{ field: "organizationId", value: input.organizationId },
+				];
 				if (input.status !== undefined) {
 					where.push({
 						field: "status",
@@ -312,7 +314,7 @@ export function createSkillsStore(
 				const valid = assertCreateSkillAclInput(input);
 				const record = assertSkillAclRecord({
 					id: valid.id ?? newId(),
-					tenantId: valid.tenantId,
+					organizationId: valid.organizationId,
 					installationId: valid.installationId,
 					principalType: valid.principalType,
 					principalId: valid.principalId,
@@ -340,7 +342,7 @@ export function createSkillsStore(
 
 			listForPrincipal(input) {
 				const where: Where[] = [
-					{ field: "tenantId", value: input.tenantId },
+					{ field: "organizationId", value: input.organizationId },
 					{
 						field: "principalType",
 						value: input.principalType,
@@ -374,7 +376,7 @@ export function createSkillsStore(
 				const valid = assertCreateSkillActivationInput(input);
 				const record = assertSkillActivationRecord({
 					id: valid.id ?? newId(),
-					tenantId: valid.tenantId,
+					organizationId: valid.organizationId,
 					clawId: valid.clawId,
 					threadId: valid.threadId,
 					runId: valid.runId,
@@ -418,7 +420,7 @@ export function createSkillsStore(
 				const valid = assertCreateSkillReadInput(input);
 				const record = assertSkillReadRecord({
 					id: valid.id ?? newId(),
-					tenantId: valid.tenantId,
+					organizationId: valid.organizationId,
 					clawId: valid.clawId,
 					threadId: valid.threadId,
 					runId: valid.runId,
@@ -465,7 +467,7 @@ export function createSkillsStore(
 				const ts = now();
 				const record = assertSkillProposalRecord({
 					id: valid.id ?? newId(),
-					tenantId: valid.tenantId,
+					organizationId: valid.organizationId,
 					targetInstallationId: valid.targetInstallationId,
 					proposerActorId: valid.proposerActorId,
 					kind: valid.kind,
@@ -485,8 +487,10 @@ export function createSkillsStore(
 				});
 			},
 
-			listForTenant(input) {
-				const where: Where[] = [{ field: "tenantId", value: input.tenantId }];
+			listForOrganization(input) {
+				const where: Where[] = [
+					{ field: "organizationId", value: input.organizationId },
+				];
 				if (input.status !== undefined) {
 					where.push({
 						field: "status",

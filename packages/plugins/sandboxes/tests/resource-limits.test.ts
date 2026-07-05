@@ -63,7 +63,7 @@ describe("@euroclaw/sandboxes resource limits", () => {
 			code: [
 				'const fs = await import("node:fs");',
 				'const chunk = "x".repeat(1024 * 1024);', // 1MB
-				'let total = 0;',
+				"let total = 0;",
 				'for (let i = 0; i < 32; i++) { fs.writeFileSync("/f" + i, chunk); total += chunk.length; }',
 				"return total;",
 			].join("\n"),

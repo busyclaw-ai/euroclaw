@@ -34,7 +34,7 @@ function newPlaceholder(): string {
 
 function scopeKey(ctx?: RedactionContext): string {
 	return [
-		ctx?.tenantId ?? "",
+		ctx?.organizationId ?? "",
 		ctx?.subjectId ?? "",
 		ctx?.memoryNamespace ?? "",
 	].join(":");
@@ -60,7 +60,8 @@ export function createMemoryPiiMappingStore(): PiiMappingStore {
 			for (const [key, mapping] of byKey) {
 				if (
 					mapping.subjectId === subjectId &&
-					(ctx?.tenantId === undefined || mapping.tenantId === ctx.tenantId)
+					(ctx?.organizationId === undefined ||
+						mapping.organizationId === ctx.organizationId)
 				) {
 					byKey.delete(key);
 				}
@@ -143,7 +144,7 @@ export function createStoredRedactor(options: StoredRedactorOptions): Redactor {
 				original: span.value,
 				kind: span.kind,
 				subjectId: ctx?.subjectId,
-				tenantId: ctx?.tenantId,
+				organizationId: ctx?.organizationId,
 				memoryNamespace: ctx?.memoryNamespace,
 				createdAt: now(),
 			});

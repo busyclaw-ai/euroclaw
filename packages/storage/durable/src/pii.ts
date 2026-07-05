@@ -26,14 +26,14 @@ function validateMapping(value: unknown): PiiMapping {
 function mappingWhere(
 	mapping: Pick<
 		PiiMapping,
-		"memoryNamespace" | "placeholder" | "subjectId" | "tenantId"
+		"memoryNamespace" | "placeholder" | "subjectId" | "organizationId"
 	>,
 ): Where[] {
 	const where: Where[] = [{ field: "placeholder", value: mapping.placeholder }];
-	if (mapping.tenantId !== undefined) {
+	if (mapping.organizationId !== undefined) {
 		where.push({
-			field: "tenantId",
-			value: mapping.tenantId,
+			field: "organizationId",
+			value: mapping.organizationId,
 			connector: "AND",
 		});
 	}
@@ -59,7 +59,7 @@ function sameScope(
 	ctx: Parameters<PiiMappingStore["resolve"]>[1],
 ): boolean {
 	return (
-		mapping.tenantId === ctx?.tenantId &&
+		mapping.organizationId === ctx?.organizationId &&
 		mapping.subjectId === ctx?.subjectId &&
 		mapping.memoryNamespace === ctx?.memoryNamespace
 	);
@@ -114,12 +114,15 @@ export function createPiiMappingStore(
 			return row?.original ?? null;
 		},
 
-		async deleteForSubject(subjectId: string, ctx?: { tenantId?: string }) {
+		async deleteForSubject(
+			subjectId: string,
+			ctx?: { organizationId?: string },
+		) {
 			const where: Where[] = [{ field: "subjectId", value: subjectId }];
-			if (ctx?.tenantId !== undefined) {
+			if (ctx?.organizationId !== undefined) {
 				where.push({
-					field: "tenantId",
-					value: ctx.tenantId,
+					field: "organizationId",
+					value: ctx.organizationId,
 					connector: "AND",
 				});
 			}

@@ -239,7 +239,7 @@ export function createClawsStore(
 				const record = assertThreadRecord({
 					id: valid.id ?? newId(),
 					clawId: valid.clawId,
-					tenantId: valid.tenantId,
+					organizationId: valid.organizationId,
 					teamId: valid.teamId,
 					ownerActorId: valid.ownerActorId,
 					title: valid.title,

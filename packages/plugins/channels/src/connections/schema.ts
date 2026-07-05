@@ -3,7 +3,7 @@ import { type EntityField, entity, field } from "@euroclaw/contracts";
 import { channelEndpointModeValues } from "../core/contracts";
 
 // A channel connection is a USER-registered bot — the ssoProvider analog: registered at runtime,
-// credentials stored in the row and read back at use, with the tenant it belongs to as optional row
+// credentials stored in the row and read back at use, with the organization it belongs to as optional row
 // DATA (the organizationId analog), never part of transport identity.
 export const channelConnectionStatusValues = ["active", "disabled"] as const;
 
@@ -27,8 +27,8 @@ export const channelConnectionFields = {
 	// (e.g. telegram's secret_token). Without it a registered webhook connection fails closed.
 	webhookSecret: field.string({ pii: "redacted" }),
 	// Whose bot this is — the organizationId analog. Merged into the claw bind defaults at dispatch.
-	tenantId: field.string({ index: true }),
-	// Bind defaults for conversations on this connection (sans tenant — tenantId above wins). Validated
+	organizationId: field.string({ index: true }),
+	// Bind defaults for conversations on this connection (sans organization — organizationId above wins). Validated
 	// against the bindConversation claw/thread inputs when the context is assembled.
 	claw: field.jsonObject({ pii: "possible" }),
 	thread: field.jsonObject({ pii: "possible" }),

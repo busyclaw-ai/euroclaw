@@ -42,14 +42,16 @@ describe("channels ↔ euroclaw integration", () => {
 		// channels owns operational state only — no credentials, no tenancy
 		expect(withPlugins.channel_endpoint?.fields.cursor).toBeDefined();
 		expect(withPlugins.channel_endpoint?.fields.secret).toBeUndefined();
-		expect(withPlugins.channel_endpoint?.fields.tenantId).toBeUndefined();
+		expect(withPlugins.channel_endpoint?.fields.organizationId).toBeUndefined();
 		// channelConnections owns the registration row — the ssoProvider analog
 		expect(withPlugins.channel_connection?.fields.secret).toBeDefined();
 		expect(withPlugins.channel_connection?.fields.webhookSecret).toBeDefined();
-		expect(withPlugins.channel_connection?.fields.tenantId).toBeDefined();
+		expect(withPlugins.channel_connection?.fields.organizationId).toBeDefined();
 		// conversation_binding stayed core (the `account` analog), keyed by endpoint
 		expect(withPlugins.conversation_binding?.fields.endpointKey).toBeDefined();
-		expect(withPlugins.conversation_binding?.fields.tenantId).toBeUndefined();
+		expect(
+			withPlugins.conversation_binding?.fields.organizationId,
+		).toBeUndefined();
 	});
 
 	it("does not put channel tables in core — only the plugins bring them", () => {
@@ -80,9 +82,12 @@ describe("channels ↔ euroclaw integration", () => {
 			mode: "webhook",
 			secret: "bot-token",
 			webhookSecret: "hook",
-			tenantId: "org-acme",
+			organizationId: "org-acme",
 		});
-		expect(created).toMatchObject({ status: "active", tenantId: "org-acme" });
+		expect(created).toMatchObject({
+			status: "active",
+			organizationId: "org-acme",
+		});
 		expect(
 			await claw.api.channels.connections.getByKey({
 				provider: "telegram",

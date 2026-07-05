@@ -100,9 +100,9 @@ export type SkillInstallationStore = {
 		input: CreateSkillInstallationInput,
 	) => Promise<SkillInstallationRecord>;
 	get: (id: string) => Promise<SkillInstallationRecord | null>;
-	listForTenant: (input: {
+	listForOrganization: (input: {
 		status?: SkillInstallationStatus;
-		tenantId: string;
+		organizationId: string;
 		visibility?: SkillInstallationVisibility;
 	}) => Promise<SkillInstallationRecord[]>;
 	updateStatus: (
@@ -119,7 +119,7 @@ export type SkillAclStore = {
 		permission?: SkillAclPermission;
 		principalId?: string;
 		principalType: SkillAclPrincipalType;
-		tenantId: string;
+		organizationId: string;
 	}) => Promise<SkillAclRecord[]>;
 };
 
@@ -140,9 +140,9 @@ export type SkillReadStore = {
 export type SkillProposalStore = {
 	create: (input: CreateSkillProposalInput) => Promise<SkillProposalRecord>;
 	get: (id: string) => Promise<SkillProposalRecord | null>;
-	listForTenant: (input: {
+	listForOrganization: (input: {
 		status?: SkillProposalStatus;
-		tenantId: string;
+		organizationId: string;
 	}) => Promise<SkillProposalRecord[]>;
 	updateStatus: (
 		id: string,

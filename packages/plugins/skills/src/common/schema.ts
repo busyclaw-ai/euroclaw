@@ -3,7 +3,7 @@ export { skillManifest, skillManifests } from "../core";
 import { type } from "arktype";
 import { nonEmptyString, skillManifest } from "../core";
 
-// Identity fields (ids, tenantId, actor refs) must be non-empty — enforced at the schema so the
+// Identity fields (ids, organizationId, actor refs) must be non-empty — enforced at the schema so the
 // API layer parses instead of re-checking each field with assertNonEmptyString.
 const nes = nonEmptyString;
 const optionalNes = nonEmptyString.or("undefined");
@@ -14,13 +14,13 @@ export const activeSkillIdRef = nonEmptyString;
 export const activeSkillInstallationRef = type({
 	installationId: nonEmptyString,
 });
-export const activeSkillTenantRef = type({
+export const activeSkillOrganizationRef = type({
 	skillId: nonEmptyString,
-	tenantId: nonEmptyString,
+	organizationId: nonEmptyString,
 });
 export const activeSkillRef = activeSkillIdRef
 	.or(activeSkillInstallationRef)
-	.or(activeSkillTenantRef);
+	.or(activeSkillOrganizationRef);
 export const activeSkillRefs = activeSkillRef.array();
 
 export const activeSkillResolution = type({
@@ -29,7 +29,7 @@ export const activeSkillResolution = type({
 	ref: activeSkillRef,
 })
 	.or({ status: "'missing'", ref: activeSkillRef })
-	.or({ status: "'tenant_required'", ref: activeSkillRef })
+	.or({ status: "'organization_required'", ref: activeSkillRef })
 	.or({ status: "'forbidden'", ref: activeSkillRef })
 	.or({ status: "'unavailable'", ref: activeSkillRef });
 
@@ -44,13 +44,13 @@ export const activateSkillInput = type({
 export const activateSkillContext = type({
 	activatedBy: nes,
 	"teamId?": optionalNes,
-	tenantId: nes,
+	organizationId: nes,
 });
 
 export const readSkillContext = type({
 	readBy: nes,
 	"teamId?": optionalNes,
-	tenantId: nes,
+	organizationId: nes,
 });
 
 export const readSkillInput = type({
@@ -60,7 +60,7 @@ export const readSkillInput = type({
 	"runId?": optionalNes,
 	"skillId?": optionalNes,
 	"source?": sourceEnum,
-	"tenantId?": optionalNes,
+	"organizationId?": optionalNes,
 	"threadId?": optionalNes,
 }).narrow((value, ctx) => {
 	// Exactly one of id / installationId / skillId identifies the skill to read.
