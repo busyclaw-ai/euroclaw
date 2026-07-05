@@ -189,6 +189,50 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+---
+
+## Executor
+
+- **Project:** Executor — local source reviewed at `/Users/konstantinponomarev/Downloads/executor-main` (study: `docs/research/executor/`)
+- **License:** MIT
+- **Used in euroclaw:** the OpenAPI → tool extraction flow is *adapted from* Executor's
+  openapi plugin (`packages/plugins/openapi/src/sdk/extract.ts` and `definitions.ts`) —
+  specifically the shape of the walk: path-level + operation-level parameter merge keyed by
+  `(in, name)` with operation override, path parameters forced required, JSON media type
+  selection in the spec author's declared order, and style/explode serialization capture.
+  Rewritten without Effect and reduced to euroclaw's scope (local-$ref-only inlining, the
+  governance-facts stamping, and the skipped/warnings reporting are euroclaw's own). File:
+  - `packages/runtime/src/tools/sources/openapi/extractor.ts`
+
+  > Note: this is listed as a provenance courtesy. The implementation is independent
+  > TypeScript. If we later copy verbatim code (e.g. the invoker), update this notice.
+
+### License (verbatim)
+
+```
+MIT License
+
+Copyright (c) 2026 Rhys Sullivan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 <!--
 To add another dependency you copy/adapt CODE from, duplicate the block above:
 

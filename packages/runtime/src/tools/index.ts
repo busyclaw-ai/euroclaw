@@ -6,8 +6,8 @@ import {
 import type { Governance } from "@euroclaw/core";
 import type { ModelMessage, ToolSet } from "ai";
 import { type } from "arktype";
-import type { RuntimeRecordingContext } from "./events";
-import type { RuntimeAbortSignal } from "./runtime";
+import type { RuntimeRecordingContext } from "../events";
+import type { RuntimeAbortSignal } from "../runtime";
 
 export type RunState = {
 	currentToolCallId: string;
@@ -82,3 +82,6 @@ export function modelFacingTools(tools: ToolSet): ToolSet {
 		}),
 	) as ToolSet;
 }
+
+export type { OpenApiExtraction, OpenApiTool } from "./sources/openapi";
+export { toolsFromOpenApi } from "./sources/openapi";

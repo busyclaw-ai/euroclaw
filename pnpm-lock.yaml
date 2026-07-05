@@ -87,9 +87,15 @@ importers:
         specifier: 0.29.2
         version: 0.29.2
     devDependencies:
+      '@euroclaw/authz':
+        specifier: workspace:*
+        version: link:../foundation/authz
       '@euroclaw/core':
         specifier: workspace:*
         version: link:../foundation/core
+      '@euroclaw/policy-cedar':
+        specifier: workspace:*
+        version: link:../policy/cedar
       '@euroclaw/skills':
         specifier: workspace:*
         version: link:../plugins/skills
