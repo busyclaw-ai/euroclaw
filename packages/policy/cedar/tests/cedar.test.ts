@@ -174,6 +174,26 @@ describe("model-driven cedar — slice 3", () => {
 		).not.toThrow();
 	});
 
+	it("quoted group ids and arg property names survive rendering AND parsing (injection hardening)", () => {
+		const hostile = buildAuthzModel([
+			{
+				id: "op",
+				source: "tool",
+				governance: { access: "write", groups: ['tag:a"b'] },
+				args: {
+					type: "object",
+					properties: { 'wei"rd': { type: "string" } },
+				},
+			},
+		]);
+		expect(() =>
+			cedar({
+				model: hostile,
+				policies: `permit(principal, action, resource);`,
+			}),
+		).not.toThrow();
+	});
+
 	it("policies condition on projected args; unprojected/unknown args are filtered, not fatal", async () => {
 		const core = createGovernance({
 			plugins: [

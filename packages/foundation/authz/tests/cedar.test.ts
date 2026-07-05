@@ -52,6 +52,19 @@ describe("projectArgs — JSON-Schema → Cedar, lossy-but-safe", () => {
 		});
 	});
 
+	it("hostile property names (__proto__) project and filter as OWN properties — no prototype mutation", () => {
+		// JSON.parse, not literals: {"__proto__": …} in a literal would set the prototype
+		const hostile = JSON.parse(
+			'{"type":"object","properties":{"__proto__":{"type":"string"}}}',
+		);
+		const p = projectArgs(hostile);
+		expect(p?.cedarType).toContain('"__proto__"?: String');
+		const filtered = p?.filter(JSON.parse('{"__proto__":"x","other":1}'));
+		expect(filtered).toBeDefined();
+		expect(Object.hasOwn(filtered ?? {}, "__proto__")).toBe(true);
+		expect(Object.keys(filtered ?? {})).toEqual(["__proto__"]);
+	});
+
 	it("returns undefined when nothing projects — the action then has no args in Cedar", () => {
 		expect(
 			projectArgs({
@@ -127,6 +140,23 @@ describe("entity JSON renderings", () => {
 				tags: { access: "write" },
 			},
 		]);
+	});
+
+	it("escapes quotes in group ids and arg property names — an untrusted spec cannot inject into the rendered schema", () => {
+		const model = buildAuthzModel([
+			{
+				id: "op",
+				source: "tool",
+				governance: { access: "write", groups: ['tag:a"b'] },
+				args: {
+					type: "object",
+					properties: { 'wei"rd': { type: "string" } },
+				},
+			},
+		]);
+		const text = modelToCedarSchema(model);
+		expect(text).toContain('action "tag:a\\"b";');
+		expect(text).toContain('"wei\\"rd"?: String');
 	});
 
 	it("actionEntitiesFromModel emits the action hierarchy for evaluation-time `action in`", () => {

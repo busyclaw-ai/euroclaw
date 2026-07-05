@@ -12,7 +12,7 @@ import type {
 	EntityRef,
 	JsonObject,
 } from "@euroclaw/contracts";
-import { projectArgs } from "./projection";
+import { cedarQuote, projectArgs } from "./projection";
 
 export type CedarSchemaOptions = {
 	/** Wrap the schema in a namespace. Default: none (policies say `Action::"x"`, `Tool::"y"`). */
@@ -33,11 +33,11 @@ function renderAction(
 	principals: readonly string[],
 ): string {
 	const membership = action.groups.length
-		? ` in [${action.groups.map((g) => `"${g}"`).join(", ")}]`
+		? ` in [${action.groups.map((g) => cedarQuote(g)).join(", ")}]`
 		: "";
 	const projection = action.args ? projectArgs(action.args) : undefined;
 	const args = projection ? `, args?: ${projection.cedarType}` : "";
-	return `action "${action.id}"${membership} appliesTo {principal: [${principals.join(", ")}], resource: [${action.resourceType}], context: {${CONTEXT_FIELDS}${args}}};`;
+	return `action ${cedarQuote(action.id)}${membership} appliesTo {principal: [${principals.join(", ")}], resource: [${action.resourceType}], context: {${CONTEXT_FIELDS}${args}}};`;
 }
 
 /** Render the model as Cedar schema text (parse/validate it with @euroclaw/policy-cedar). */
@@ -76,9 +76,9 @@ export function modelToCedarSchema(
 		.sort(([a], [b]) => a.localeCompare(b))
 		.map(([id, memberOf]) => {
 			const inClause = memberOf.length
-				? ` in [${memberOf.map((m) => `"${m}"`).join(", ")}]`
+				? ` in [${memberOf.map((m) => cedarQuote(m)).join(", ")}]`
 				: "";
-			return `action "${id}"${inClause};`;
+			return `action ${cedarQuote(id)}${inClause};`;
 		});
 
 	const actions = model.actions.map((a) => renderAction(a, principals));

@@ -63,6 +63,12 @@ function projectShape(schema: JsonObject): ProjectedShape | undefined {
 	return undefined;
 }
 
+/** Quote a string for Cedar schema text. Names can come from UNTRUSTED schemas (an uploaded
+ *  spec's property names) — unescaped quotes would inject into the rendered schema. */
+export function cedarQuote(value: string): string {
+	return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
 /** Render a projected shape as Cedar schema type text. */
 export function renderCedarType(shape: ProjectedShape): string {
 	switch (shape.kind) {
@@ -79,7 +85,7 @@ export function renderCedarType(shape: ProjectedShape): string {
 				.sort(([a], [b]) => a.localeCompare(b))
 				.map(
 					([name, p]) =>
-						`"${name}"${p.required ? "" : "?"}: ${renderCedarType(p.shape)}`,
+						`${cedarQuote(name)}${p.required ? "" : "?"}: ${renderCedarType(p.shape)}`,
 				);
 			return `{${fields.join(", ")}}`;
 		}
@@ -93,12 +99,14 @@ function filterToShape(shape: ProjectedShape, value: JsonValue): JsonValue {
 	if (shape.kind === "record") {
 		const obj = asObject(value);
 		if (!obj) return value;
-		const out: JsonObject = {};
+		// fromEntries, not assignment: prop names come from untrusted schemas — "__proto__"
+		// must become an own property of the filtered args, never a prototype mutation.
+		const entries: [string, JsonValue][] = [];
 		for (const [name, p] of shape.props) {
-			const v = obj[name];
-			if (v !== undefined) out[name] = filterToShape(p.shape, v);
+			const v = Object.hasOwn(obj, name) ? obj[name] : undefined;
+			if (v !== undefined) entries.push([name, filterToShape(p.shape, v)]);
 		}
-		return out;
+		return Object.fromEntries(entries);
 	}
 	if (shape.kind === "set" && Array.isArray(value)) {
 		return value.map((item) => filterToShape(shape.of, item));
