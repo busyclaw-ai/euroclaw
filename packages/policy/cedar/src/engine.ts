@@ -84,6 +84,12 @@ export function cedarEngine(config: CedarEngineConfig): PolicyEngine {
 					error: answer.errors.map((e) => e.message).join("; "),
 				};
 			}
+			// NB: cedar-wasm populates `diagnostics.errors` even for a `has`-guarded, short-circuited
+			// optional-attribute access (the standard idiom for optional context facts) — the DECISION
+			// is still correct. So we must NOT blanket-deny on `diagnostics.errors`: that would break
+			// every correct `has`-guarded policy (verified against 4.11.1). Policies that must fail
+			// closed on an unknown fact express it structurally with `unless { … has x … }` (see
+			// @euroclaw/authz SYSTEM_POSTURE), so an erroring branch makes the forbid APPLY, not vanish.
 			return {
 				allow: answer.response.decision === "allow",
 				policies: answer.response.diagnostics.reason,
