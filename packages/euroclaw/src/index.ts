@@ -305,6 +305,36 @@ function createPluginApi(input: {
 	return out;
 }
 
+// No host resolveSecret ⇒ every credential is "not configured": public registered tools work,
+// authed ones fail loud at call time (the invoker's null-vs-configured contract).
+const nullSecretResolver: SecretResolver = () => null;
+
+/**
+ * Build the per-run tool resolver for an organization's registered rows: synthesize its rows into
+ * invoker-backed tools, with org/actor read from the RESOLVED turn context and closure-captured at
+ * synthesis (never the AI-SDK execute options, which carry no turn context). The provider is built
+ * once here; the returned resolver runs per turn.
+ */
+function registeredToolResolver(
+	stores: RegistryStores,
+	resolveSecret: SecretResolver | undefined,
+): NonNullable<RuntimeConfig["resolveTools"]> {
+	const provider = createRegisteredToolProvider({
+		resolveSecret: resolveSecret ?? nullSecretResolver,
+	});
+	return async (ctx) => {
+		const organizationId = ctx[ORGANIZATION_CONTEXT_KEY];
+		if (typeof organizationId !== "string") return {};
+		const rows =
+			await stores.registeredTools.listByOrganization(organizationId);
+		const actor = ctx[ACTOR_CONTEXT_KEY];
+		return provider(rows, {
+			organizationId,
+			actor: typeof actor === "string" ? actor : undefined,
+		});
+	};
+}
+
 export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 	config: Config &
 		RequireCronHandler<Config> &
@@ -344,31 +374,10 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 	const registryStores =
 		config.stores?.registry ??
 		(adapter ? createRegistryStores(adapter) : undefined);
-	// Registered tools become executable per run: synthesize an org's rows into invoker-backed tools
-	// (credentials via the host's resolveSecret; absent ⇒ a null resolver — public tools work, authed
-	// ones fail loud) and hand the runtime a per-run resolver. org/actor are read from the RESOLVED
-	// turn context and closure-captured at synthesis (never from the AI-SDK execute options).
-	const registeredToolProvider = registryStores
-		? createRegisteredToolProvider({
-				resolveSecret: config.resolveSecret ?? (() => null),
-			})
+	// Registered tools become executable per run (see registeredToolResolver above).
+	const resolveTools = registryStores
+		? registeredToolResolver(registryStores, config.resolveSecret)
 		: undefined;
-	const resolveTools: RuntimeConfig["resolveTools"] =
-		registryStores && registeredToolProvider
-			? async (ctx) => {
-					const organizationId = ctx[ORGANIZATION_CONTEXT_KEY];
-					if (typeof organizationId !== "string") return {};
-					const rows =
-						await registryStores.registeredTools.listByOrganization(
-							organizationId,
-						);
-					const actor = ctx[ACTOR_CONTEXT_KEY];
-					return registeredToolProvider(rows, {
-						organizationId,
-						...(typeof actor === "string" ? { actor } : {}),
-					});
-				}
-			: undefined;
 	const eventSinks = [
 		...(clawsStore ? [createClawRuntimeEventSink(clawsStore)] : []),
 		...eventSinksFrom(config.events),
