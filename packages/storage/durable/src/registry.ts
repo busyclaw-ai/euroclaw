@@ -437,27 +437,28 @@ export function createRegistryStores(
 			return record;
 		},
 
-		async deleteById(id) {
-			// A delete APPENDS a change event (keeping the count monotonic) — read first for the org,
-			// and skip the append when the row was already gone (a no-op must not bump the count).
+		async delete(organizationId, id) {
+			// Org-scoped: find AND delete by (organizationId, id), so a caller in one org can never
+			// remove another org's slice by id. A delete APPENDS a change event (keeping the count
+			// monotonic) — read first for the org, skip the append when the row was absent (a no-op
+			// must not bump the count).
 			const existing = await policyDb.findOne<PolicySliceRecord>({
 				model: POLICY_MODEL,
-				where: [whereEq("id", id)],
+				where: [whereEq("organizationId", organizationId), andEq("id", id)],
 			});
+			if (!existing) return;
+			const prev = validatePolicy(existing);
 			await policyDb.delete({
 				model: POLICY_MODEL,
-				where: [whereEq("id", id)],
+				where: [whereEq("organizationId", organizationId), andEq("id", id)],
 			});
-			if (existing) {
-				const prev = validatePolicy(existing);
-				await authzChanges.append({
-					organizationId: prev.organizationId,
-					kind: "policy_changed",
-					// `by` is the row's last actor — deleteById(id) carries no acting principal itself.
-					summary: { slice: prev.name, deleted: true },
-					by: prev.updatedBy,
-				});
-			}
+			await authzChanges.append({
+				organizationId: prev.organizationId,
+				kind: "policy_changed",
+				// `by` is the row's last actor — delete carries no acting principal itself.
+				summary: { slice: prev.name, deleted: true },
+				by: prev.updatedBy,
+			});
 		},
 	};
 

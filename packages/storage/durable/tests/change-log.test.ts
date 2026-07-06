@@ -161,7 +161,7 @@ describe("authz changes are appended on every mutation", () => {
 			memoryAdapter(),
 		);
 		const created = await policySlices.upsert(slice("org-a", "guard"));
-		await policySlices.deleteById(created.id);
+		await policySlices.delete(created.organizationId, created.id);
 		expect(await authzChanges.count("org-a")).toBe(2); // upsert + delete = 2 events
 		const kinds = (await authzChanges.listByOrganization("org-a")).map(
 			(c) => c.kind,
@@ -179,7 +179,7 @@ describe("authz changes are appended on every mutation", () => {
 		const a = await policySlices.upsert(slice("org-a", "a")); // older row
 		await policySlices.upsert(slice("org-a", "b")); // newer row — holds the MAX updatedAt
 		expect(await authzChanges.count("org-a")).toBe(2);
-		await policySlices.deleteById(a.id); // delete the NON-newest row
+		await policySlices.delete(a.organizationId, a.id); // delete the NON-newest row
 		// max(updatedAt) is unchanged (b is still newest) → a stale key; append-only count bumps:
 		expect(await authzChanges.count("org-a")).toBe(3);
 	});
@@ -188,7 +188,7 @@ describe("authz changes are appended on every mutation", () => {
 		const { policySlices, authzChanges } = createRegistryStores(
 			memoryAdapter(),
 		);
-		await policySlices.deleteById("does-not-exist");
+		await policySlices.delete("org-a", "does-not-exist");
 		expect(await authzChanges.count("org-a")).toBe(0);
 	});
 

@@ -24,7 +24,8 @@ export const policySliceFields = {
 		immutable: true,
 	}),
 	// A human label AND the stable slice id within the org — upsert replaces by (organizationId, name).
-	name: field.string({ required: true }),
+	// Indexed like its siblings facts_overlay.actionId / spec_registration.source (the by-name lookup).
+	name: field.string({ required: true, index: true }),
 	// The raw customer Cedar (one or more permit/forbid statements). UNTRUSTED: stored verbatim and
 	// parsed only at bundle CONSTRUCTION (cedarEngine throws configurationError on a bad set) — never
 	// parsed or trusted here.

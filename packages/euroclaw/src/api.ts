@@ -222,7 +222,10 @@ export type ClawApi<Config extends RuntimeConfig = RuntimeConfig> = {
 	listPolicySlices: (input: {
 		organizationId: string;
 	}) => Promise<PolicySliceRecord[]>;
-	deletePolicySlice: (input: { id: string }) => Promise<void>;
+	deletePolicySlice: (input: {
+		organizationId: string;
+		id: string;
+	}) => Promise<void>;
 
 	startRun: (input: EngineStartRunInput) => Promise<EngineRunHandle>;
 	continueEngineRun: (
@@ -343,6 +346,7 @@ const putPolicySliceInput = ark({
 	updatedBy: "string",
 });
 const listPolicySlicesInput = ark({ organizationId: "string" });
+const deletePolicySliceInput = ark({ organizationId: "string", id: "string" });
 export const clawApiInputSchemas = {
 	bindConversation: bindConversationInput,
 	appendMessage: appendMessageInput,
@@ -355,7 +359,7 @@ export const clawApiInputSchemas = {
 	createThread: createThreadInput,
 	createToolCall: createToolCallInput,
 	createToolResult: createToolResultInput,
-	deletePolicySlice: idInput,
+	deletePolicySlice: deletePolicySliceInput,
 	denyApproval: denyApprovalInput,
 	getApproval: idInput,
 	getCheckpoint: idInput,
@@ -711,7 +715,8 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 		putPolicySlice: (args) => registry().policySlices.upsert(args),
 		listPolicySlices: ({ organizationId }) =>
 			registry().policySlices.listByOrganization(organizationId),
-		deletePolicySlice: ({ id }) => registry().policySlices.deleteById(id),
+		deletePolicySlice: ({ organizationId, id }) =>
+			registry().policySlices.delete(organizationId, id),
 
 		startRun: (args) => {
 			assertNoReservedContext(args.ctx);

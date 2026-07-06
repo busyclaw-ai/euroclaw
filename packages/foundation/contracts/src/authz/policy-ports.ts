@@ -9,7 +9,10 @@ import type { PolicySliceRecord, PolicySliceUpsert } from "./policy-slice";
 export type PolicySliceStore = {
 	listByOrganization: (organizationId: string) => Promise<PolicySliceRecord[]>;
 	upsert: (input: PolicySliceUpsert) => Promise<PolicySliceRecord>;
-	deleteById: (id: string) => Promise<void>;
+	/** Org-scoped delete: a slice is removed only when the id belongs to `organizationId`, so a
+	 *  caller in one org can never delete another org's slice by id (defense in depth). No-op when
+	 *  absent. */
+	delete: (organizationId: string, id: string) => Promise<void>;
 };
 
 /** The append-only authz change log. `count` is the cheap per-decision read the org router keys on;

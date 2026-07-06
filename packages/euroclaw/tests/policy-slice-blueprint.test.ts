@@ -235,7 +235,7 @@ describe("policy-slice blueprint (composed slice 6b)", () => {
 		// Delete the OLDER forbidding slice.
 		for (const slice of await stores.policySlices.listByOrganization("org-d")) {
 			if (slice.name === "a-forbid")
-				await stores.policySlices.deleteById(slice.id);
+				await stores.policySlices.delete(slice.organizationId, slice.id);
 		}
 		// count bumped → cache miss → rebuild WITHOUT the forbid → readDoc runs again.
 		expect((await call("org-d", "readDoc")).status).toBe("ok");
@@ -303,6 +303,22 @@ describe("policy-slice blueprint (composed slice 6b)", () => {
 		expect(ran.length).toBe(before + 1);
 		expect(candidateBuildErrors.length).toBeGreaterThan(0); // surfaced, not silent
 	});
+
+	it("a slice referencing an UNKNOWN action is inert — the host owns the schema (known limit)", async () => {
+		const { call, stores } = setup();
+		// This reference composition compiles customer Cedar with NO schema (engine-agnostic — the
+		// host owns the model/schema), so a slice with a typo'd action ref parses fine but matches no
+		// real action → silently inert. Pinned so the footgun is KNOWN, not hidden. A stricter host
+		// can pass modelToCedarSchema(model) + Cedar policy validation to reject unknown-action refs.
+		await stores.policySlices.upsert({
+			organizationId: "org-typo",
+			name: "typo-forbid",
+			cedar: `forbid(principal, action == Action::"reedDoc", resource);`, // typo: reedDoc != readDoc
+			mode: "enforce",
+			updatedBy: "admin",
+		});
+		expect((await call("org-typo", "readDoc")).status).toBe("ok"); // the typo'd forbid never fires
+	});
 });
 
 describe("policy-slice api surface", () => {
@@ -323,7 +339,7 @@ describe("policy-slice api surface", () => {
 		expect(
 			await api.listPolicySlices({ organizationId: "org-a" }),
 		).toHaveLength(1);
-		await api.deletePolicySlice({ id: created.id });
+		await api.deletePolicySlice({ organizationId: "org-a", id: created.id });
 		expect(await api.listPolicySlices({ organizationId: "org-a" })).toEqual([]);
 		// put + delete each appended → the org router's count-keyed version bumped twice.
 		expect(await stores.authzChanges.count("org-a")).toBe(2);

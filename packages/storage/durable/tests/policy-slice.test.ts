@@ -62,10 +62,13 @@ describe("createRegistryStores — policy_slice", () => {
 		expect(listed.map((s) => s.name).sort()).toEqual(["a", "b"]);
 	});
 
-	it("deleteById removes the row", async () => {
+	it("delete removes the row (org-scoped)", async () => {
 		const { policySlices } = createRegistryStores(memoryAdapter());
 		const created = await policySlices.upsert(sliceInput("org-a"));
-		await policySlices.deleteById(created.id);
+		// A wrong-org delete is a no-op — a caller cannot remove another org's slice by id.
+		await policySlices.delete("org-b", created.id);
+		expect(await policySlices.listByOrganization("org-a")).toHaveLength(1);
+		await policySlices.delete("org-a", created.id);
 		expect(await policySlices.listByOrganization("org-a")).toEqual([]);
 	});
 
