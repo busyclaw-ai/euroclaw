@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadPolicyBundle } from "../src/index";
+import { authzBundleKey, loadPolicyBundle } from "../src/index";
 
 const SYSTEM = `permit(principal, action in Action::"reads", resource);`;
 
@@ -55,5 +55,42 @@ describe("loadPolicyBundle", () => {
 		expect(bundle.live).toBe(SYSTEM); // both off and shadow are excluded from live
 		expect(bundle.shadow).toContain("SHADOW_S");
 		expect(bundle.shadow).not.toContain("OFF_O");
+	});
+});
+
+describe("authzBundleKey", () => {
+	it("count 0 ⇒ the shared 'system' bundle (an uncustomized org)", () => {
+		expect(authzBundleKey({ organizationId: "org-a", changeCount: 0 })).toBe(
+			"system",
+		);
+	});
+
+	it("an absent organizationId ⇒ 'system'", () => {
+		expect(authzBundleKey({ organizationId: undefined, changeCount: 5 })).toBe(
+			"system",
+		);
+	});
+
+	it("a positive count ⇒ `org:count`", () => {
+		expect(authzBundleKey({ organizationId: "org-a", changeCount: 3 })).toBe(
+			"org-a:3",
+		);
+	});
+
+	it("the same count ⇒ the same key (a cache hit); a bump ⇒ a new key (rebuild)", () => {
+		const at3 = authzBundleKey({ organizationId: "org-a", changeCount: 3 });
+		expect(authzBundleKey({ organizationId: "org-a", changeCount: 3 })).toBe(
+			at3,
+		);
+		// A delete or edit APPENDS to the log → the count bumps → a distinct key → the router rebuilds.
+		expect(
+			authzBundleKey({ organizationId: "org-a", changeCount: 4 }),
+		).not.toBe(at3);
+	});
+
+	it("org isolation: different orgs at the same count get different keys", () => {
+		expect(
+			authzBundleKey({ organizationId: "org-a", changeCount: 2 }),
+		).not.toBe(authzBundleKey({ organizationId: "org-b", changeCount: 2 }));
 	});
 });

@@ -39,3 +39,21 @@ export function loadPolicyBundle(input: {
 	if (shadow.length === 0) return { live };
 	return { live, shadow: [live, ...shadow].join("\n") };
 }
+
+/**
+ * The org's bundle identity for the policy router — `${organizationId}:${changeCount}`, or the shared
+ * `"system"` bundle when the org is uncustomized (changeCount 0) or absent. `changeCount` is
+ * count(authz_change) for the org: the log is APPEND-ONLY, so the count strictly increases and no two
+ * authz states share a key — SOUND under add/edit/DELETE (a delete APPENDS an event, bumping the
+ * count), where `max(updatedAt)` is not (deleting a non-newest row leaves the max unchanged → a stale
+ * bundle). The router reads one cheap `count()` per decision and calls this.
+ */
+export function authzBundleKey(input: {
+	organizationId: string | undefined;
+	changeCount: number;
+}): string {
+	if (input.organizationId === undefined || input.changeCount === 0) {
+		return "system";
+	}
+	return `${input.organizationId}:${input.changeCount}`;
+}
