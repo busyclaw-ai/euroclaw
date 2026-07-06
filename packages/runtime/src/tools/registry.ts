@@ -12,6 +12,7 @@
 // only this flow and the domain-verb action constant.
 
 import {
+	type AuthzChangeStore,
 	type JsonObject,
 	jsonObject,
 	type RegisteredToolStore,
@@ -125,11 +126,14 @@ function toolContentVersion(input: {
 	);
 }
 
-/** Back the registration flow with the two registry stores it writes through. */
+/** Back the registration flow with the registry stores it writes through. `authzChanges` is optional
+ *  so callers with only the two tool stores still work; when present, each registration appends a
+ *  `spec_registered` event that bumps the org router's count-keyed bundle version (slice 6b). */
 export function createSpecRegistry(
 	stores: {
 		specRegistrations: SpecRegistrationStore;
 		registeredTools: RegisteredToolStore;
+		authzChanges?: AuthzChangeStore;
 	},
 	options: SpecRegistryOptions = {},
 ): SpecRegistry {
@@ -241,6 +245,14 @@ export function createSpecRegistry(
 				contentVersion,
 				report: asJsonObject(report, "spec registration report"),
 				registeredBy: input.registeredBy,
+			});
+			// A registration is an authz-state change — append so the org router's count-keyed bundle
+			// version bumps and the newly registered surface takes effect on the next decision.
+			await stores.authzChanges?.append({
+				organizationId: input.organizationId,
+				kind: "spec_registered",
+				summary: { source: input.source, contentVersion },
+				by: input.registeredBy,
 			});
 
 			return { ...report, contentVersion };

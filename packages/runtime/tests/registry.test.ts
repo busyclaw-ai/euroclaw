@@ -1,4 +1,6 @@
 import type {
+	AuthzChangeRecord,
+	AuthzChangeStore,
 	JsonObject,
 	RegisteredToolRecord,
 	RegisteredToolStore,
@@ -7,6 +9,31 @@ import type {
 } from "@euroclaw/contracts";
 import { describe, expect, it } from "vitest";
 import { createSpecRegistry } from "../src/tools/registry";
+
+// An in-memory fake of the append-only change log (slice 6b) — the registration flow's optional
+// third collaborator; when present, each registration appends a `spec_registered` event.
+function fakeAuthzChanges() {
+	const changes: AuthzChangeRecord[] = [];
+	let seq = 0;
+	const store: AuthzChangeStore = {
+		async append(input) {
+			const record = {
+				id: `chg-${seq++}`,
+				at: "t",
+				...input,
+			} as AuthzChangeRecord;
+			changes.push(record);
+			return record;
+		},
+		async count(organizationId) {
+			return changes.filter((c) => c.organizationId === organizationId).length;
+		},
+		async listByOrganization(organizationId) {
+			return changes.filter((c) => c.organizationId === organizationId);
+		},
+	};
+	return { store, changes };
+}
 
 // In-memory fakes of the two store ports (plain Maps) — the registration flow's only collaborators.
 function fakeStores() {
@@ -250,6 +277,37 @@ describe("createSpecRegistry — governed openapi registration", () => {
 			}),
 		).rejects.toThrow("too large");
 		expect(stores.tools.size).toBe(0);
+	});
+
+	it("appends a spec_registered authz change when a change log is provided", async () => {
+		const stores = fakeStores();
+		const { store: authzChanges, changes } = fakeAuthzChanges();
+		const registry = createSpecRegistry({ ...stores, authzChanges });
+		const report = await registry.registerOpenApiSpec({
+			organizationId: "org-a",
+			source: "petstore",
+			document: petstore(),
+			registeredBy: "alice",
+		});
+		expect(await authzChanges.count("org-a")).toBe(1);
+		expect(changes[0]).toMatchObject({
+			kind: "spec_registered",
+			organizationId: "org-a",
+			summary: { source: "petstore", contentVersion: report.contentVersion },
+			by: "alice",
+		});
+	});
+
+	it("registers fine without a change log (authzChanges optional)", async () => {
+		const stores = fakeStores();
+		const registry = createSpecRegistry(stores); // no authzChanges
+		const report = await registry.registerOpenApiSpec({
+			organizationId: "org-a",
+			source: "petstore",
+			document: petstore(),
+			registeredBy: "alice",
+		});
+		expect(report.added).toHaveLength(4); // the append is a no-op; registration still works
 	});
 
 	it("passes the extractor's skipped diagnostics through to the report", async () => {

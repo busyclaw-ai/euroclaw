@@ -116,3 +116,103 @@ describe("createRegistryStores — authz_change (append-only log)", () => {
 		);
 	});
 });
+
+const slice = (organizationId: string, name: string) => ({
+	organizationId,
+	name,
+	cedar: `forbid(principal, action == Action::"x", resource);`,
+	mode: "enforce" as const,
+	updatedBy: "admin",
+});
+
+const overlay = (organizationId: string, actionId: string) => ({
+	organizationId,
+	actionId,
+	access: "read" as const,
+	updatedBy: "admin",
+});
+
+describe("authz changes are appended on every mutation", () => {
+	it("a policy-slice upsert appends policy_changed and bumps the count", async () => {
+		const { policySlices, authzChanges } = createRegistryStores(
+			memoryAdapter(),
+		);
+		await policySlices.upsert(slice("org-a", "guard"));
+		expect(await authzChanges.count("org-a")).toBe(1);
+		const [change] = await authzChanges.listByOrganization("org-a");
+		expect(change).toMatchObject({
+			kind: "policy_changed",
+			summary: { slice: "guard" },
+			by: "admin",
+		});
+	});
+
+	it("editing a slice (upsert same name) appends again — every edit bumps the count", async () => {
+		const { policySlices, authzChanges } = createRegistryStores(
+			memoryAdapter(),
+		);
+		await policySlices.upsert(slice("org-a", "guard"));
+		await policySlices.upsert(slice("org-a", "guard")); // an edit — a replace, still a change
+		expect(await authzChanges.count("org-a")).toBe(2);
+	});
+
+	it("a policy-slice delete APPENDS (never removes log rows) — the count bumps", async () => {
+		const { policySlices, authzChanges } = createRegistryStores(
+			memoryAdapter(),
+		);
+		const created = await policySlices.upsert(slice("org-a", "guard"));
+		await policySlices.deleteById(created.id);
+		expect(await authzChanges.count("org-a")).toBe(2); // upsert + delete = 2 events
+		const kinds = (await authzChanges.listByOrganization("org-a")).map(
+			(c) => c.kind,
+		);
+		expect(kinds).toEqual(["policy_changed", "policy_changed"]);
+	});
+
+	it("deleting the OLDER of two slices still bumps the count — the case max(updatedAt) misses", async () => {
+		const { policySlices, authzChanges } = createRegistryStores(
+			memoryAdapter(),
+			{
+				now: stamps(),
+			},
+		);
+		const a = await policySlices.upsert(slice("org-a", "a")); // older row
+		await policySlices.upsert(slice("org-a", "b")); // newer row — holds the MAX updatedAt
+		expect(await authzChanges.count("org-a")).toBe(2);
+		await policySlices.deleteById(a.id); // delete the NON-newest row
+		// max(updatedAt) is unchanged (b is still newest) → a stale key; append-only count bumps:
+		expect(await authzChanges.count("org-a")).toBe(3);
+	});
+
+	it("a no-op delete (row already gone) does NOT append", async () => {
+		const { policySlices, authzChanges } = createRegistryStores(
+			memoryAdapter(),
+		);
+		await policySlices.deleteById("does-not-exist");
+		expect(await authzChanges.count("org-a")).toBe(0);
+	});
+
+	it("a facts-overlay upsert and delete each append overlay_changed", async () => {
+		const { factsOverlay, authzChanges } = createRegistryStores(
+			memoryAdapter(),
+		);
+		const created = await factsOverlay.upsert(
+			overlay("org-a", "petstore.getPet"),
+		);
+		expect(await authzChanges.count("org-a")).toBe(1);
+		await factsOverlay.deleteById(created.id);
+		expect(await authzChanges.count("org-a")).toBe(2);
+		const kinds = (await authzChanges.listByOrganization("org-a")).map(
+			(c) => c.kind,
+		);
+		expect(kinds).toEqual(["overlay_changed", "overlay_changed"]);
+	});
+
+	it("appends are org-scoped — org A's mutations never change org B's count", async () => {
+		const { policySlices, authzChanges } = createRegistryStores(
+			memoryAdapter(),
+		);
+		await policySlices.upsert(slice("org-a", "guard"));
+		expect(await authzChanges.count("org-b")).toBe(0);
+	});
+});

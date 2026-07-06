@@ -1,8 +1,13 @@
-// createRegistryStores — the three tool-registry ports (SpecRegistrationStore /
-// RegisteredToolStore / FactsOverlayStore), backed by any @euroclaw/storage-core Adapter. JSON
-// columns (specBlob, report, inputSchema, governance, binding, groups) are (de)serialized by
-// `schemaAdapter` from the entity schema — the stores never hand-roll row mapping. Every READ is
-// parsed through the record schema (untrusted boundary: a hostile row must fail loud, not cast).
+// createRegistryStores — the tool-registry ports (SpecRegistrationStore / RegisteredToolStore /
+// FactsOverlayStore) plus the slice-6b customer-policy stores (PolicySliceStore + the append-only
+// AuthzChangeStore), backed by any @euroclaw/storage-core Adapter. JSON columns (specBlob, report,
+// inputSchema, governance, binding, groups, summary) are (de)serialized by `schemaAdapter` from the
+// entity schema — the stores never hand-roll row mapping. Every READ is parsed through the record
+// schema (untrusted boundary: a hostile row must fail loud, not cast).
+//
+// The authz change log is the router's version source: every authz mutation here — facts_overlay and
+// policy_slice upsert AND delete — APPENDS an authz_change (createSpecRegistry appends the
+// spec_registered event). Append-only ⇒ count() is monotonic ⇒ authzBundleKey is sound under delete.
 //
 // Replace semantics: spec_registration replaces in place per (organizationId, source) — all its
 // mutable columns are re-set, id/createdAt preserved. facts_overlay replaces per (organizationId,
@@ -310,14 +315,36 @@ export function createRegistryStores(
 				updatedAt: stamp,
 			});
 			await overlayDb.create({ model: OVERLAY_MODEL, data: record });
+			await authzChanges.append({
+				organizationId: valid.organizationId,
+				kind: "overlay_changed",
+				summary: { actionId: valid.actionId },
+				by: valid.updatedBy,
+			});
 			return record;
 		},
 
 		async deleteById(id) {
+			// Read first: the append needs the org (the router keys on its count), and a no-op delete
+			// (the row is already gone) must NOT bump the count.
+			const existing = await overlayDb.findOne<FactsOverlayRecord>({
+				model: OVERLAY_MODEL,
+				where: [whereEq("id", id)],
+			});
 			await overlayDb.delete({
 				model: OVERLAY_MODEL,
 				where: [whereEq("id", id)],
 			});
+			if (existing) {
+				const prev = validateOverlay(existing);
+				await authzChanges.append({
+					organizationId: prev.organizationId,
+					kind: "overlay_changed",
+					// `by` is the row's last actor — deleteById(id) carries no acting principal itself.
+					summary: { actionId: prev.actionId, deleted: true },
+					by: prev.updatedBy,
+				});
+			}
 		},
 	};
 
@@ -352,8 +379,8 @@ export function createRegistryStores(
 
 	// A customer's Cedar policy slices; upsert REPLACES in place per (organizationId, name) — id +
 	// createdAt preserved, updatedAt bumped (all fields required, so nothing to clear; the in-place
-	// replace mirrors spec_registration). The recordAuthzChange append on every mutation is wired in
-	// Step 4, not here.
+	// replace mirrors spec_registration). Every mutation (upsert AND delete) appends to the authz
+	// change log, so the router's `count`-keyed version bumps and the edit takes effect next decision.
 	const policySlices: PolicySliceStore = {
 		async listByOrganization(organizationId) {
 			const rows = await policyDb.findMany<PolicySliceRecord>({
@@ -373,6 +400,7 @@ export function createRegistryStores(
 				],
 			});
 			const stamp = now();
+			let record: PolicySliceRecord;
 			if (existing) {
 				const prev = validatePolicy(existing);
 				const updated = await policyDb.update<PolicySliceRecord>({
@@ -389,23 +417,47 @@ export function createRegistryStores(
 				if (!updated) {
 					throw stateError("policy slice vanished mid-upsert", { id: prev.id });
 				}
-				return validatePolicy(updated);
+				record = validatePolicy(updated);
+			} else {
+				record = validatePolicy({
+					...valid,
+					id: newId(),
+					createdAt: stamp,
+					updatedAt: stamp,
+				});
+				await policyDb.create({ model: POLICY_MODEL, data: record });
 			}
-			const record = validatePolicy({
-				...valid,
-				id: newId(),
-				createdAt: stamp,
-				updatedAt: stamp,
+			// Append after the write succeeds — a failed write must never bump the router's version.
+			await authzChanges.append({
+				organizationId: valid.organizationId,
+				kind: "policy_changed",
+				summary: { slice: valid.name },
+				by: valid.updatedBy,
 			});
-			await policyDb.create({ model: POLICY_MODEL, data: record });
 			return record;
 		},
 
 		async deleteById(id) {
+			// A delete APPENDS a change event (keeping the count monotonic) — read first for the org,
+			// and skip the append when the row was already gone (a no-op must not bump the count).
+			const existing = await policyDb.findOne<PolicySliceRecord>({
+				model: POLICY_MODEL,
+				where: [whereEq("id", id)],
+			});
 			await policyDb.delete({
 				model: POLICY_MODEL,
 				where: [whereEq("id", id)],
 			});
+			if (existing) {
+				const prev = validatePolicy(existing);
+				await authzChanges.append({
+					organizationId: prev.organizationId,
+					kind: "policy_changed",
+					// `by` is the row's last actor — deleteById(id) carries no acting principal itself.
+					summary: { slice: prev.name, deleted: true },
+					by: prev.updatedBy,
+				});
+			}
 		},
 	};
 
