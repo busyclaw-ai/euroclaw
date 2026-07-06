@@ -12,12 +12,24 @@
 
 import type { Adapter, Where } from "@euroclaw/contracts";
 import {
+	type AuthzChangeAppend,
+	type AuthzChangeRecord,
+	type AuthzChangeStore,
+	authzChangeAppend as authzChangeAppendSchema,
+	authzChangeRecord as authzChangeRecordSchema,
+	authzChangeSchema,
 	type FactsOverlayRecord,
 	type FactsOverlayStore,
 	type FactsOverlayUpsert,
 	factsOverlayRecord as factsOverlayRecordSchema,
 	factsOverlaySchema,
 	factsOverlayUpsert as factsOverlayUpsertSchema,
+	type PolicySliceRecord,
+	type PolicySliceStore,
+	type PolicySliceUpsert,
+	policySliceRecord as policySliceRecordSchema,
+	policySliceSchema,
+	policySliceUpsert as policySliceUpsertSchema,
 	type RegisteredToolCreate,
 	type RegisteredToolPatch,
 	type RegisteredToolRecord,
@@ -44,16 +56,22 @@ type RegistryStoresOptions = {
 	now?: () => string;
 };
 
-/** The three registry ports over one adapter (they share the `now`/id sources). */
+/** The registry ports over one adapter (they share the `now`/id sources). Also carries the slice-6b
+ *  customer-policy stores — the policy slices and the append-only authz change log (whose count keys
+ *  the org policy router). They ride the same adapter as product durable state, not a plugin. */
 export type RegistryStores = {
 	specRegistrations: SpecRegistrationStore;
 	registeredTools: RegisteredToolStore;
 	factsOverlay: FactsOverlayStore;
+	policySlices: PolicySliceStore;
+	authzChanges: AuthzChangeStore;
 };
 
 const SPEC_MODEL = "spec_registration";
 const TOOL_MODEL = "registered_tool";
 const OVERLAY_MODEL = "facts_overlay";
+const POLICY_MODEL = "policy_slice";
+const CHANGE_MODEL = "authz_change";
 const newId = (): string => bytesToHex(randomBytes(16));
 
 const whereEq = (field: string, value: string): Where => ({ field, value });
@@ -72,6 +90,8 @@ export function createRegistryStores(
 	const specDb = schemaAdapter(adapter, specRegistrationSchema);
 	const toolDb = schemaAdapter(adapter, registeredToolSchema);
 	const overlayDb = schemaAdapter(adapter, factsOverlaySchema);
+	const policyDb = schemaAdapter(adapter, policySliceSchema);
+	const changeDb = schemaAdapter(adapter, authzChangeSchema);
 
 	function validateSpec(record: unknown): SpecRegistrationRecord {
 		const valid = specRegistrationRecordSchema(record);
@@ -119,6 +139,34 @@ export function createRegistryStores(
 		const valid = factsOverlayUpsertSchema(input);
 		if (valid instanceof type.errors) {
 			throw validationError("facts overlay input invalid", valid.summary);
+		}
+		return valid;
+	}
+	function validatePolicy(record: unknown): PolicySliceRecord {
+		const valid = policySliceRecordSchema(record);
+		if (valid instanceof type.errors) {
+			throw validationError("policy slice record invalid", valid.summary);
+		}
+		return valid;
+	}
+	function validatePolicyInput(input: unknown): PolicySliceUpsert {
+		const valid = policySliceUpsertSchema(input);
+		if (valid instanceof type.errors) {
+			throw validationError("policy slice input invalid", valid.summary);
+		}
+		return valid;
+	}
+	function validateChange(record: unknown): AuthzChangeRecord {
+		const valid = authzChangeRecordSchema(record);
+		if (valid instanceof type.errors) {
+			throw validationError("authz change record invalid", valid.summary);
+		}
+		return valid;
+	}
+	function validateChangeInput(input: unknown): AuthzChangeAppend {
+		const valid = authzChangeAppendSchema(input);
+		if (valid instanceof type.errors) {
+			throw validationError("authz change input invalid", valid.summary);
 		}
 		return valid;
 	}
@@ -273,5 +321,99 @@ export function createRegistryStores(
 		},
 	};
 
-	return { specRegistrations, registeredTools, factsOverlay };
+	// The append-only authz change log. `append` stamps id + at; `count` is the cheap per-decision
+	// read the org router keys on; `listByOrganization` (sorted oldest-first) is the deferred-use
+	// history. There is no update or delete — a DELETE elsewhere APPENDS a change event, so the count
+	// stays monotonic (sound where max(updatedAt) is not).
+	const authzChanges: AuthzChangeStore = {
+		async append(input) {
+			const valid = validateChangeInput(input);
+			const record = validateChange({ ...valid, id: newId(), at: now() });
+			await changeDb.create({ model: CHANGE_MODEL, data: record });
+			return record;
+		},
+
+		async count(organizationId) {
+			return changeDb.count({
+				model: CHANGE_MODEL,
+				where: [whereEq("organizationId", organizationId)],
+			});
+		},
+
+		async listByOrganization(organizationId) {
+			const rows = await changeDb.findMany<AuthzChangeRecord>({
+				model: CHANGE_MODEL,
+				where: [whereEq("organizationId", organizationId)],
+				sortBy: { field: "at", direction: "asc" },
+			});
+			return rows.map(validateChange);
+		},
+	};
+
+	// A customer's Cedar policy slices; upsert REPLACES in place per (organizationId, name) — id +
+	// createdAt preserved, updatedAt bumped (all fields required, so nothing to clear; the in-place
+	// replace mirrors spec_registration). The recordAuthzChange append on every mutation is wired in
+	// Step 4, not here.
+	const policySlices: PolicySliceStore = {
+		async listByOrganization(organizationId) {
+			const rows = await policyDb.findMany<PolicySliceRecord>({
+				model: POLICY_MODEL,
+				where: [whereEq("organizationId", organizationId)],
+			});
+			return rows.map(validatePolicy);
+		},
+
+		async upsert(input) {
+			const valid = validatePolicyInput(input);
+			const existing = await policyDb.findOne<PolicySliceRecord>({
+				model: POLICY_MODEL,
+				where: [
+					whereEq("organizationId", valid.organizationId),
+					andEq("name", valid.name),
+				],
+			});
+			const stamp = now();
+			if (existing) {
+				const prev = validatePolicy(existing);
+				const updated = await policyDb.update<PolicySliceRecord>({
+					model: POLICY_MODEL,
+					where: [whereEq("id", prev.id)],
+					// The store owns updatedAt — spread first so a caller-supplied one is overridden.
+					update: {
+						cedar: valid.cedar,
+						mode: valid.mode,
+						updatedBy: valid.updatedBy,
+						updatedAt: stamp,
+					},
+				});
+				if (!updated) {
+					throw stateError("policy slice vanished mid-upsert", { id: prev.id });
+				}
+				return validatePolicy(updated);
+			}
+			const record = validatePolicy({
+				...valid,
+				id: newId(),
+				createdAt: stamp,
+				updatedAt: stamp,
+			});
+			await policyDb.create({ model: POLICY_MODEL, data: record });
+			return record;
+		},
+
+		async deleteById(id) {
+			await policyDb.delete({
+				model: POLICY_MODEL,
+				where: [whereEq("id", id)],
+			});
+		},
+	};
+
+	return {
+		specRegistrations,
+		registeredTools,
+		factsOverlay,
+		policySlices,
+		authzChanges,
+	};
 }

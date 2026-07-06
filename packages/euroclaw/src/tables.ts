@@ -7,6 +7,7 @@
 // source. Nothing here — and nothing in storage-durable — imports a plugin; registration is declarative.
 import {
 	approvalSchema,
+	authzChangeSchema,
 	clawsSchema,
 	configurationError,
 	type EntityField,
@@ -15,6 +16,7 @@ import {
 	entity,
 	factsOverlaySchema,
 	piiMappingSchema,
+	policySliceSchema,
 	registeredToolSchema,
 	runCheckpointSchema,
 	specRegistrationSchema,
@@ -35,6 +37,9 @@ const CORE_TABLES: SchemaDeclaration = {
 	...specRegistrationSchema,
 	...registeredToolSchema,
 	...factsOverlaySchema,
+	// Slice 6b: customer policy slices + the append-only authz change log (its count keys the router).
+	...policySliceSchema,
+	...authzChangeSchema,
 };
 
 /**

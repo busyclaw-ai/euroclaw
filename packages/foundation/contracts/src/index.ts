@@ -12,6 +12,17 @@ export {
 	unsupportedOperationError,
 	validationError,
 } from "@euroclaw/errors";
+// ── customer policy slices + the append-only authz change log (slice 6b; durable authz state —
+// bundle loader/version key/shadow engine in @euroclaw/authz, stores in @euroclaw/storage-durable) ──
+export type {
+	AuthzChangeAppend,
+	AuthzChangeRecord,
+} from "./authz/change-log";
+export {
+	authzChangeAppend,
+	authzChangeRecord,
+	authzChangeSchema,
+} from "./authz/change-log";
 // ── authz protocol: the model + policy-engine port (toolkit in @euroclaw/authz, engines in
 // @euroclaw/policy-*) ──
 export type { AuthzEntity, EntityDirectory } from "./authz/directory";
@@ -24,6 +35,19 @@ export type {
 	AuthzModel,
 	EntityTypeDef,
 } from "./authz/model";
+export type {
+	AuthzChangeStore,
+	PolicySliceStore,
+} from "./authz/policy-ports";
+export type {
+	PolicySliceRecord,
+	PolicySliceUpsert,
+} from "./authz/policy-slice";
+export {
+	policySliceRecord,
+	policySliceSchema,
+	policySliceUpsert,
+} from "./authz/policy-slice";
 export type { EntityRef, PolicyRequest, PolicyResult } from "./authz/request";
 export { entityRef, policyRequest, policyResult } from "./authz/request";
 // ── claws (conversational/agent-state domain) ────────────────────────────────
