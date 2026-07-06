@@ -23,6 +23,7 @@ import type {
 	EuroclawPlugin,
 	JsonObject,
 	MessageRecord,
+	PolicySliceRecord,
 	RegisteredToolRecord,
 	ThreadRecord,
 	ToolCallRecord,
@@ -207,6 +208,22 @@ export type ClawApi<Config extends RuntimeConfig = RuntimeConfig> = {
 	}) => Promise<RegisteredToolRecord[]>;
 	listActions: (input: { organizationId: string }) => Promise<ActionView[]>;
 
+	// Customer policy slices (slice 6b): a customer's own Cedar policies, each enforce|shadow|off,
+	// merged over the code-owned system posture. Edits append to the authz change log → the org
+	// router rebuilds on the next decision. euroclaw stays engine-agnostic — it stores the slices; the
+	// host composes createOrgPolicyRouter with a cedar engineFor (see the policy-slice E2E).
+	putPolicySlice: (input: {
+		organizationId: string;
+		name: string;
+		cedar: string;
+		mode: "enforce" | "shadow" | "off";
+		updatedBy: string;
+	}) => Promise<PolicySliceRecord>;
+	listPolicySlices: (input: {
+		organizationId: string;
+	}) => Promise<PolicySliceRecord[]>;
+	deletePolicySlice: (input: { id: string }) => Promise<void>;
+
 	startRun: (input: EngineStartRunInput) => Promise<EngineRunHandle>;
 	continueEngineRun: (
 		input: EngineContinueRunInput,
@@ -318,6 +335,14 @@ const listRegisteredToolsInput = ark({
 	"source?": "string | undefined",
 });
 const listActionsInput = ark({ organizationId: "string" });
+const putPolicySliceInput = ark({
+	cedar: "string",
+	mode: "'enforce' | 'shadow' | 'off'",
+	name: "string",
+	organizationId: "string",
+	updatedBy: "string",
+});
+const listPolicySlicesInput = ark({ organizationId: "string" });
 export const clawApiInputSchemas = {
 	bindConversation: bindConversationInput,
 	appendMessage: appendMessageInput,
@@ -330,6 +355,7 @@ export const clawApiInputSchemas = {
 	createThread: createThreadInput,
 	createToolCall: createToolCallInput,
 	createToolResult: createToolResultInput,
+	deletePolicySlice: idInput,
 	denyApproval: denyApprovalInput,
 	getApproval: idInput,
 	getCheckpoint: idInput,
@@ -346,10 +372,12 @@ export const clawApiInputSchemas = {
 	listActions: listActionsInput,
 	listApprovals: listApprovalsInput,
 	listMessages: listMessagesInput,
+	listPolicySlices: listPolicySlicesInput,
 	listRegisteredTools: listRegisteredToolsInput,
 	listRunEvents: runIdInput,
 	listThreads: clawIdInput,
 	listToolResults: runToolCallInput,
+	putPolicySlice: putPolicySliceInput,
 	registerOpenApiSpec: registerOpenApiSpecInput,
 	run: runInput,
 	sendMessage: sendMessageInput,
@@ -679,6 +707,11 @@ export function createClawApi<Config extends RuntimeConfig>(input: {
 				overlay,
 			}).actions;
 		},
+
+		putPolicySlice: (args) => registry().policySlices.upsert(args),
+		listPolicySlices: ({ organizationId }) =>
+			registry().policySlices.listByOrganization(organizationId),
+		deletePolicySlice: ({ id }) => registry().policySlices.deleteById(id),
 
 		startRun: (args) => {
 			assertNoReservedContext(args.ctx);
