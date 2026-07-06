@@ -94,6 +94,12 @@ export function defaultRuntimeNewId(prefix: string): string {
 export type RuntimeConfig = {
 	model: RuntimeModel;
 	tools?: ToolSet;
+	/** Resolve extra tools for THIS run (an organization's registered tools) from the resolved turn
+	 *  context, merged over the static `tools` ONCE per run. Code tools win name collisions — a
+	 *  host tool is never shadowed by a registered upload; a colliding registered tool is skipped,
+	 *  never silently substituted. Registrations are rare and decisions hot, so the merge is per-run,
+	 *  not per tool call. */
+	resolveTools?: (ctx: Record<string, unknown>) => ToolSet | Promise<ToolSet>;
 	system?: string;
 	redactor?: Redactor;
 	organization?: OrganizationResolver;
@@ -406,6 +412,35 @@ export function createRuntime<const Config extends RuntimeConfig>(
 	});
 	const modelTools = modelFacingTools(tools);
 	const catalog = createToolCatalog(toolEntriesFromToolSet(tools));
+
+	// Merge a run's resolved tools over the static code tools: code tools WIN name collisions (a host
+	// tool is never shadowed by a registered upload), and a colliding registered tool is skipped
+	// loudly, never silently replaced.
+	const mergeRunTools = (resolved: ToolSet): ToolSet => {
+		const merged: ToolSet = { ...tools };
+		for (const [name, tool] of Object.entries(resolved)) {
+			if (name in tools) {
+				console.warn(
+					`euroclaw: registered tool "${name}" skipped — a code tool already owns that name`,
+				);
+				continue;
+			}
+			merged[name] = tool;
+		}
+		return merged;
+	};
+	// Resolve the run's tool set + model-facing view ONCE per run. With no resolver the precomputed
+	// static sets are reused (zero cost); both dispatch (`runTools[name]`) and the model-facing view
+	// see the SAME merged set.
+	const resolveRunTools = async (
+		resolvedCtx: Record<string, unknown>,
+	): Promise<{ runTools: ToolSet; runModelTools: ToolSet }> => {
+		if (!config.resolveTools) {
+			return { runTools: tools, runModelTools: modelTools };
+		}
+		const runTools = mergeRunTools(await config.resolveTools(resolvedCtx));
+		return { runTools, runModelTools: modelFacingTools(runTools) };
+	};
 	const emitEvent = (
 		context: { recording?: RuntimeRecordingContext; runId?: string },
 		payload: RuntimeEventPayloadInput,
@@ -494,6 +529,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 	const createRunCore = (
 		state: RunState,
 		approvalStoreOverride = approvalStore,
+		runTools: ToolSet = tools,
 	) => {
 		const resolveGovernanceContext = async (
 			ctx: Record<string, unknown>,
@@ -549,7 +585,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 			},
 			runTool: async (call, _ctx, { rehydrate }) => {
 				abortIfNeeded(state.abortSignal);
-				const tool = tools[call.name];
+				const tool = runTools[call.name];
 				if (!tool || typeof tool.execute !== "function") {
 					throw stateError(`euroclaw: no executable tool "${call.name}"`, {
 						toolName: call.name,
@@ -695,7 +731,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 				}
 			},
 		});
-		registerToolGates(core, tools);
+		registerToolGates(core, runTools);
 
 		// Nested calls (an invoker tool's `subInvoke`) share redaction, audit, plugins, and
 		// identity resolution with the parent core, but structurally lack its two ambient-state
@@ -714,7 +750,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 				resolveContext: resolveGovernanceContext,
 				runTool: async (call, nestedCtx, { rehydrate }) => {
 					abortIfNeeded(state.abortSignal);
-					const tool = tools[call.name];
+					const tool = runTools[call.name];
 					if (!tool || typeof tool.execute !== "function") {
 						throw stateError(`euroclaw: no executable tool "${call.name}"`, {
 							toolName: call.name,
@@ -808,15 +844,16 @@ export function createRuntime<const Config extends RuntimeConfig>(
 		state.recording = recording;
 		state.runId = options?.runId;
 		const emitCtx = { recording, runId: options?.runId };
-		const core = createRunCore(state);
 		const resolvedCtx = await resolveRunContext(ctx);
+		const { runTools, runModelTools } = await resolveRunTools(resolvedCtx);
+		const core = createRunCore(state, approvalStore, runTools);
 		await emitEvent(emitCtx, {
 			prompt: String(await redactEventValue(prompt, resolvedCtx)),
 			type: "run.started",
 		});
 		const result = await runAiSdkLoop({
 			model: config.model,
-			tools: modelTools,
+			tools: runModelTools,
 			system: config.system,
 			prompt,
 			ctx,
@@ -894,6 +931,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 		if (record.status !== "approved" && record.status !== "consumed")
 			return null;
 		const resolvedCtx = await resolveRunContext(ctx);
+		const { runTools, runModelTools } = await resolveRunTools(resolvedCtx);
 
 		const state = createRunState();
 		state.runInstanceId = `approval:${id}`;
@@ -917,6 +955,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 						consume: async (approvalId) => (approvalId === id ? record : null),
 					}
 				: approvalStore,
+			runTools,
 		);
 		const toolResult = await core.continueRun(id, ctx);
 		if (!toolResult) return null;
@@ -974,13 +1013,13 @@ export function createRuntime<const Config extends RuntimeConfig>(
 		resumeState.runId = options?.runId;
 		const result = await runAiSdkLoop({
 			model: config.model,
-			tools: modelTools,
+			tools: runModelTools,
 			system: config.system,
 			messages,
 			startStep: checkpoint.step + 1,
 			ctx,
 			resolvedCtx,
-			core: createRunCore(resumeState),
+			core: createRunCore(resumeState, approvalStore, runTools),
 			state: resumeState,
 			maxSteps,
 			now,
@@ -1023,6 +1062,7 @@ export function createRuntime<const Config extends RuntimeConfig>(
 		const runId = options?.runId ?? checkpoint.runId;
 		const emitCtx = { recording, runId };
 		const resolvedCtx = await resolveRunContext(ctx);
+		const { runTools, runModelTools } = await resolveRunTools(resolvedCtx);
 
 		const state = createRunState();
 		state.runInstanceId = `checkpoint:${checkpointId}`;
@@ -1032,13 +1072,13 @@ export function createRuntime<const Config extends RuntimeConfig>(
 
 		const result = await runAiSdkLoop({
 			model: config.model,
-			tools: modelTools,
+			tools: runModelTools,
 			system: config.system,
 			messages: checkpoint.messages,
 			startStep: checkpoint.nextStep,
 			ctx,
 			resolvedCtx,
-			core: createRunCore(state),
+			core: createRunCore(state, approvalStore, runTools),
 			state,
 			maxSteps,
 			now,

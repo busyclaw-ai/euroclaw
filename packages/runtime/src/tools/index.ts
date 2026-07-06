@@ -83,7 +83,15 @@ export function modelFacingTools(tools: ToolSet): ToolSet {
 	) as ToolSet;
 }
 
+export type { EgressLookup, ResolvedAddress } from "./egress";
+export type {
+	InvokerResponse,
+	RegisteredToolContext,
+	RegisteredToolProvider,
+	RegisteredToolProviderOptions,
+} from "./registered-tool-provider";
+export { createRegisteredToolProvider } from "./registered-tool-provider";
 export type { SpecRegistrationReport, SpecRegistry } from "./registry";
 export { createSpecRegistry, REGISTER_OPENAPI_SPEC_ACTION } from "./registry";
 export type { OpenApiExtraction, OpenApiTool } from "./sources/openapi";
-export { toolsFromOpenApi } from "./sources/openapi";
+export { normalizeOrigin, toolsFromOpenApi } from "./sources/openapi";

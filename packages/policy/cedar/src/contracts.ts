@@ -33,6 +33,11 @@ export type CedarPluginConfig = CedarEngineConfig & {
 	model?: AuthzModel;
 	/** Map a tool call + Cedar context to (principal, action, resource, context). Override for ABAC. */
 	mapCall?: (call: ToolCall, ctx: CedarContext) => PolicyRequest;
+	/** The egress origin for an action, from its registered binding's server — stamped as the
+	 *  spoof-proof `context.server` fact so egress becomes policy-visible. Model-DERIVED (like
+	 *  `entities`), never caller-derived: it comes from the registered model, not `req.context`, so a
+	 *  caller/model cannot forge it and a tool cannot target a server other than the one it declares. */
+	serverForAction?: (actionId: string) => string | undefined;
 	/** Which calls Cedar governs. Default: every call (the allowlist). */
 	matcher?: (call: ToolCall, ctx: CedarContext) => boolean;
 	/** Entity type for the default-mapped principal (from `ctx.principal`). Default "User". */

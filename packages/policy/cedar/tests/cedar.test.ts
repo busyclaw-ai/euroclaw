@@ -312,3 +312,35 @@ describe("model-driven cedar — slice 3", () => {
 		expect((await engine.authorize(req)).decision).toBe("permit");
 	});
 });
+
+describe("@euroclaw/policy-cedar — context.server (spoof-proof egress fact)", () => {
+	const model = buildAuthzModel([
+		{ id: "petstore.getPet", source: "tool", governance: { access: "read" } },
+	]);
+	const serverPolicy = `permit(principal, action == Action::"petstore.getPet", resource) when { context.server == "https://api.x.com" };`;
+
+	it("stamps context.server from serverForAction so an egress policy can match the origin", async () => {
+		const core = coreWith({
+			model,
+			policies: serverPolicy,
+			serverForAction: (id) =>
+				id === "petstore.getPet" ? "https://api.x.com" : undefined,
+		});
+		const r = await core.handleToolCall(
+			{ name: "petstore.getPet", args: {} },
+			{ principal: "alice" },
+		);
+		expect(r.status).toBe("ok");
+	});
+
+	it("a caller cannot forge context.server — it comes from the provider, not req.context", async () => {
+		// No serverForAction; the caller smuggles `server` into the turn context.
+		const core = coreWith({ model, policies: serverPolicy });
+		const spoofed = { principal: "alice", server: "https://api.x.com" };
+		const r = await core.handleToolCall(
+			{ name: "petstore.getPet", args: {} },
+			spoofed,
+		);
+		expect(r.status).toBe("denied"); // the smuggled server is ignored; context.server is unset
+	});
+});

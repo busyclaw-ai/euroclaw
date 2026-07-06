@@ -23,10 +23,12 @@ export type CedarSchemaOptions = {
 
 // The standard request context every action carries — the runtime-stamped, spoof-proof facts.
 // `confirmationUsed` is always present (mapCall hardcodes false; the probe flips it); the rest
-// are optional (stamped when resolution provides them). Per-action `args` appends when the
-// action's schema projects.
+// are optional (stamped when resolution provides them). `server` is the model-derived egress
+// origin of the action's binding (a registered tool literally cannot target another server), so an
+// org can write egress policy over `context.server`. Per-action `args` appends when the action's
+// schema projects.
 const CONTEXT_FIELDS =
-	"confirmationUsed: Bool, clawId?: String, organizationId?: String, role?: String, runMode?: String, team?: String";
+	"confirmationUsed: Bool, clawId?: String, organizationId?: String, role?: String, runMode?: String, server?: String, team?: String";
 
 function renderAction(
 	action: ActionDef,

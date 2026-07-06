@@ -23,6 +23,7 @@ import { validationError } from "@euroclaw/contracts";
 import { type } from "arktype";
 import {
 	HTTP_METHODS,
+	type OpenApiAuthScheme,
 	type OpenApiDiagnostic,
 	type OpenApiExtraction,
 	type OpenApiMethod,
@@ -42,6 +43,10 @@ const VERB_GROUPS: Partial<Record<OpenApiMethod, string>> = {
 	patch: "updates",
 	delete: "deletes",
 };
+// Non-idempotent verbs: a timed-out effect must NOT be re-fired (a double POST creates two rows).
+// This drives `effect.idempotency`, which the runtime effect store reads as `reclaimExpired:
+// idempotency !== "none"` — "none" ⇒ an expired lease is left uncertain, never reclaimed/re-run.
+const NON_IDEMPOTENT_METHODS = new Set<OpenApiMethod>(["post", "patch"]);
 
 /** Extract every operation of an OpenAPI 3.x document into governance-stamped tool definitions. */
 export function toolsFromOpenApi(document: JsonObject): OpenApiExtraction {
@@ -192,6 +197,7 @@ function extractOperation(
 	const summary = operation.summary;
 	const description = operation.description;
 	const security = extractSecurity(document, operation, notes);
+	const authSchemes = extractAuthSchemes(document, security, notes);
 	const server = serverUrl(document, pathItem, operation);
 	const tool: OpenApiTool = {
 		name: deriveToolName(operation, method, path),
@@ -212,6 +218,7 @@ function extractOperation(
 				: {}),
 			...(bodyWrapped ? { bodyWrapped } : {}),
 			...(security !== undefined ? { security } : {}),
+			...(authSchemes !== undefined ? { authSchemes } : {}),
 			...(operation.deprecated === true ? { deprecated: true } : {}),
 		},
 	};
@@ -370,7 +377,102 @@ function deriveGovernance(
 	return {
 		access: READ_METHODS.has(method) ? "read" : "write",
 		...(unique.length > 0 ? { groups: unique } : {}),
+		// An external HTTP effect: non-idempotent verbs must never auto-retry on a lost lease.
+		effect: {
+			kind: "external",
+			idempotency: NON_IDEMPOTENT_METHODS.has(method) ? "none" : "optional",
+		},
 	};
+}
+
+// Resolve the scheme DEFINITIONS an operation's requirements reference, denormalized onto the
+// binding. A referenced scheme that has no definition, or one euroclaw's invoker can't place, is a
+// WARNING — extraction still yields a governed (if uninvokable) tool; the invoker fails loud at call
+// time if a REQUIRED scheme is unsupported. Local $refs on a scheme resolve through the shared node
+// resolver; a remote/circular ref on a scheme drops that scheme (never the operation).
+function extractAuthSchemes(
+	document: JsonObject,
+	security: readonly Record<string, readonly string[]>[] | undefined,
+	notes: string[],
+): Record<string, OpenApiAuthScheme> | undefined {
+	if (!security || security.length === 0) return undefined;
+	const names = new Set<string>();
+	for (const requirement of security) {
+		for (const name of Object.keys(requirement)) names.add(name);
+	}
+	if (names.size === 0) return undefined;
+	const components = asJsonObject(document.components);
+	const definitions = asJsonObject(components?.securitySchemes);
+	// Own-name entries + fromEntries: a spec-authored scheme name ("__proto__") must land as an own
+	// property, never a prototype mutation.
+	const entries: [string, OpenApiAuthScheme][] = [];
+	for (const name of names) {
+		if (!definitions || !Object.hasOwn(definitions, name)) {
+			notes.push(
+				`security scheme "${name}" has no definition in components.securitySchemes`,
+			);
+			continue;
+		}
+		let resolved: JsonValue;
+		try {
+			resolved = resolveNode(document, definitions[name] ?? null);
+		} catch (error) {
+			notes.push(
+				`security scheme "${name}" dropped (${error instanceof OperationSkip ? error.message : String(error)})`,
+			);
+			continue;
+		}
+		const scheme = toAuthScheme(name, resolved, notes);
+		if (scheme) entries.push([name, scheme]);
+	}
+	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function toAuthScheme(
+	name: string,
+	raw: JsonValue,
+	notes: string[],
+): OpenApiAuthScheme | undefined {
+	if (!isJsonObject(raw)) {
+		notes.push(
+			`security scheme "${name}" dropped (definition is not an object)`,
+		);
+		return undefined;
+	}
+	const schemeType = raw.type;
+	if (schemeType === "apiKey") {
+		const location = raw.in;
+		const keyName = raw.name;
+		if (
+			(location === "header" || location === "query") &&
+			typeof keyName === "string" &&
+			keyName !== ""
+		) {
+			return { type: "apiKey", in: location, name: keyName };
+		}
+		notes.push(
+			`apiKey scheme "${name}" dropped (unsupported in=${JSON.stringify(location)} or missing name)`,
+		);
+		return undefined;
+	}
+	if (schemeType === "http") {
+		const httpScheme =
+			typeof raw.scheme === "string" ? raw.scheme.toLowerCase() : undefined;
+		if (httpScheme === "bearer" || httpScheme === "basic") {
+			return { type: "http", scheme: httpScheme };
+		}
+		notes.push(
+			`http scheme "${name}" dropped (unsupported scheme ${JSON.stringify(raw.scheme)}; only bearer/basic)`,
+		);
+		return undefined;
+	}
+	if (schemeType === "oauth2" || schemeType === "openIdConnect") {
+		return { type: schemeType };
+	}
+	notes.push(
+		`security scheme "${name}" dropped (unsupported type ${JSON.stringify(schemeType)})`,
+	);
+	return undefined;
 }
 
 function extractSecurity(

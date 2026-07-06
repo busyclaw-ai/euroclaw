@@ -24,7 +24,7 @@ import {
 	type RegisteredToolRecord,
 	validationError,
 } from "@euroclaw/contracts";
-import type { SpecRegistry } from "@euroclaw/runtime";
+import { normalizeOrigin, type SpecRegistry } from "@euroclaw/runtime";
 import { tool } from "@euroclaw/vendors/ai-sdk";
 import { type } from "arktype";
 
@@ -92,6 +92,29 @@ export function assembleOrgActions(input: {
 		loosenings: merged.loosenings,
 		unmatched: merged.unmatched,
 	};
+}
+
+/**
+ * Build the `serverForAction` provider for the Cedar plugin from an organization's registered
+ * rows: action id (`<source>.<tool>`) → the binding's NORMALIZED origin. The same normalization the
+ * egress floor + request plan use, so `context.server` matches the origin a tool actually reaches.
+ * Model-derived and spoof-proof — it comes from the stored binding, never caller context. A row
+ * whose server is absent/unparseable simply carries no origin fact (the tool is uninvokable anyway).
+ */
+export function serverForActionFromRegisteredTools(
+	rows: readonly RegisteredToolRecord[],
+): (actionId: string) => string | undefined {
+	const origins = new Map<string, string>();
+	for (const row of rows) {
+		const server = row.binding.server;
+		if (typeof server !== "string") continue;
+		try {
+			origins.set(row.address, normalizeOrigin(server));
+		} catch {
+			// Uninvokable binding — no egress fact to stamp.
+		}
+	}
+	return (actionId) => origins.get(actionId);
 }
 
 /**

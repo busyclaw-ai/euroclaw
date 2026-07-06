@@ -112,6 +112,9 @@ export function cedar(config: CedarPluginConfig): PolicyPlugin<CedarContext> {
 					? { args: indexed.projection.filter(call.args) }
 					: {}
 				: { args: call.args };
+			// The egress origin comes from the model/binding side provider, NOT ctx — a caller/model
+			// cannot forge context.server, and a tool cannot target a server it did not declare.
+			const server = config.serverForAction?.(call.name);
 			return {
 				principal: { type: principalType, id: ctx.principal },
 				action: { type: "Action", id: call.name },
@@ -123,6 +126,7 @@ export function cedar(config: CedarPluginConfig): PolicyPlugin<CedarContext> {
 					...args,
 					[approvalFlag]: false,
 					...facts,
+					...(server !== undefined ? { server } : {}),
 				},
 			};
 		});

@@ -615,6 +615,149 @@ describe("toolsFromOpenApi — servers and security", () => {
 	});
 });
 
+describe("toolsFromOpenApi — auth-scheme definitions (slice 6a)", () => {
+	const securitySchemes = {
+		apiKeyHeader: { type: "apiKey", in: "header", name: "X-API-Key" },
+		apiKeyQuery: { type: "apiKey", in: "query", name: "api_key" },
+		bearerAuth: { type: "http", scheme: "bearer" },
+		basicAuth: { type: "http", scheme: "Basic" }, // case-folded to "basic"
+		oauth: { type: "oauth2", flows: {} },
+	};
+
+	it("denormalizes the referenced scheme definitions onto the binding", () => {
+		const spec = doc(
+			{
+				"/a": {
+					get: {
+						operationId: "op",
+						security: [{ apiKeyHeader: [] }, { bearerAuth: [] }],
+					},
+				},
+			},
+			{ components: { securitySchemes } },
+		);
+		const tool = toolsFromOpenApi(spec).tools[0];
+		expect(tool?.binding.authSchemes).toEqual({
+			apiKeyHeader: { type: "apiKey", in: "header", name: "X-API-Key" },
+			bearerAuth: { type: "http", scheme: "bearer" },
+		});
+	});
+
+	it("captures apiKey-in-query, basic (case-folded), and oauth2 (type only)", () => {
+		const spec = doc(
+			{
+				"/a": {
+					get: {
+						operationId: "op",
+						security: [{ apiKeyQuery: [] }, { basicAuth: [] }, { oauth: [] }],
+					},
+				},
+			},
+			{ components: { securitySchemes } },
+		);
+		const tool = toolsFromOpenApi(spec).tools[0];
+		expect(tool?.binding.authSchemes).toEqual({
+			apiKeyQuery: { type: "apiKey", in: "query", name: "api_key" },
+			basicAuth: { type: "http", scheme: "basic" },
+			oauth: { type: "oauth2" },
+		});
+	});
+
+	it("resolves a local $ref on a scheme definition (shared inliner)", () => {
+		const spec = doc(
+			{
+				"/a": {
+					get: { operationId: "op", security: [{ keyRef: [] }] },
+				},
+			},
+			{
+				components: {
+					securitySchemes: {
+						keyRef: { $ref: "#/components/x-schemes/real" },
+					},
+					"x-schemes": {
+						real: { type: "apiKey", in: "header", name: "X-Key" },
+					},
+				},
+			},
+		);
+		const tool = toolsFromOpenApi(spec).tools[0];
+		expect(tool?.binding.authSchemes).toEqual({
+			keyRef: { type: "apiKey", in: "header", name: "X-Key" },
+		});
+	});
+
+	it("warns (does not throw) on an unsupported scheme type; the operation still extracts", () => {
+		const spec = doc(
+			{
+				"/a": { get: { operationId: "op", security: [{ weird: [] }] } },
+			},
+			{
+				components: {
+					securitySchemes: { weird: { type: "mutualTLS" } },
+				},
+			},
+		);
+		const extraction = toolsFromOpenApi(spec);
+		expect(extraction.tools).toHaveLength(1); // governed-but-uninvokable is coherent
+		expect(extraction.tools[0]?.binding.authSchemes).toBeUndefined();
+		expect(
+			extraction.warnings.some((w) => /unsupported type/.test(w.reason)),
+		).toBe(true);
+	});
+
+	it("warns when a requirement references a scheme with no definition", () => {
+		const spec = doc({
+			"/a": { get: { operationId: "op", security: [{ ghost: [] }] } },
+		});
+		const extraction = toolsFromOpenApi(spec);
+		expect(extraction.tools[0]?.binding.authSchemes).toBeUndefined();
+		expect(
+			extraction.warnings.some((w) => /no definition/.test(w.reason)),
+		).toBe(true);
+	});
+});
+
+describe("toolsFromOpenApi — effect idempotency per verb (slice 6a)", () => {
+	const byName = new Map(
+		toolsFromOpenApi(
+			doc({
+				"/pets": {
+					get: { operationId: "listPets" },
+					post: { operationId: "addPet" },
+				},
+				"/pets/{petId}": {
+					parameters: [
+						{ name: "petId", in: "path", schema: { type: "integer" } },
+					],
+					put: { operationId: "replacePet" },
+					patch: { operationId: "tweakPet" },
+					delete: { operationId: "removePet" },
+					head: { operationId: "peekPet" },
+				},
+			}),
+		).tools.map((t) => [t.name, t]),
+	);
+
+	it("stamps external effect; POST/PATCH non-idempotent (none), everything else idempotent (optional)", () => {
+		// The invariant: a non-idempotent write's expired lease must never be reclaimed/re-run.
+		expect(byName.get("addPet")?.governance.effect).toEqual({
+			kind: "external",
+			idempotency: "none",
+		});
+		expect(byName.get("tweakPet")?.governance.effect).toEqual({
+			kind: "external",
+			idempotency: "none",
+		});
+		for (const name of ["listPets", "replacePet", "removePet", "peekPet"]) {
+			expect(byName.get(name)?.governance.effect).toEqual({
+				kind: "external",
+				idempotency: "optional",
+			});
+		}
+	});
+});
+
 describe("toolsFromOpenApi — hostile documents", () => {
 	it("a $ref bomb (exponential fan-out, no cycle) is bounded, skipped, and fast", () => {
 		const schemas: JsonObject = { L0: { type: "string" } };
