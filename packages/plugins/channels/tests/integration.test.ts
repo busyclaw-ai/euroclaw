@@ -1,5 +1,6 @@
 import { field } from "@euroclaw/contracts";
 import { createStoredRedactor, noopDetector } from "@euroclaw/core";
+import { env } from "@euroclaw/secrets";
 import { memoryAdapter } from "@euroclaw/storage-core";
 import { createPiiMappingStore } from "@euroclaw/storage-durable";
 import type { wrapLanguageModel } from "ai";
@@ -30,8 +31,9 @@ function textModel(text: string): V2Model {
 }
 
 function appBot() {
-	// the app's own bot: a token is the whole config — webhook verification derives from it
-	return telegram({ token: "app-token" });
+	// the app's own bot: its token resolves through the one-door reader (secrets.get), so bare
+	// telegram() is the whole config — these tests don't drive its traffic, so no reader is needed
+	return telegram();
 }
 
 describe("channels ↔ euroclaw integration", () => {
@@ -112,9 +114,11 @@ describe("channels ↔ euroclaw integration", () => {
 				detector: noopDetector,
 				mappings: createPiiMappingStore(db),
 			}),
+			// the named app bot resolves its token via its own tokenRef → "app-token"
+			secrets: [env({ source: { SALES_BOT: "app-token" } })],
 			plugins: [
 				channels([
-					telegram({ fetch: fakeFetch, name: "sales", token: "app-token" }),
+					telegram({ fetch: fakeFetch, name: "sales", tokenRef: "SALES_BOT" }),
 				]),
 				channelConnections([telegram({ fetch: fakeFetch })]),
 			],
@@ -195,23 +199,94 @@ describe("channels ↔ euroclaw integration", () => {
 		expect(() => channels(dupes)).toThrow(/duplicate channel/);
 	});
 
-	it("fails at startup when an app bot has no token anywhere", () => {
-		vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
-		try {
-			// a dead bot fails at wiring time, not on first traffic
-			expect(() => channels([telegram()])).toThrow(/telegram bot has no token/);
-		} finally {
-			vi.unstubAllEnvs();
-		}
+	it("resolves an app bot's token through createClaw's one-door reader on first traffic", async () => {
+		// no code token: it resolves from the reader the assembly threads into channels.configure —
+		// `secrets.get("TELEGRAM_BOT_TOKEN")` — proving the one-door wire end to end (was the old
+		// "resolves from TELEGRAM_BOT_TOKEN at startup", now that resolution is lazy, not at startup).
+		const apiCalls: string[] = [];
+		const fakeFetch = async (url: string) => {
+			apiCalls.push(url);
+			return { ok: true, json: async () => ({ ok: true, result: {} }) };
+		};
+		const db = memoryAdapter();
+		const claw = createClaw({
+			database: db,
+			model: textModel("pong"),
+			redactor: createStoredRedactor({
+				detector: noopDetector,
+				mappings: createPiiMappingStore(db),
+			}),
+			secrets: [env({ source: { TELEGRAM_BOT_TOKEN: "env-token" } })],
+			plugins: [channels([telegram({ fetch: fakeFetch })])],
+		});
+
+		const update = JSON.stringify({
+			update_id: 1,
+			message: { message_id: 2, text: "hi", chat: { id: 42 } },
+		});
+		const route = (claw.$context.plugins ?? [])
+			.flatMap((plugin) => plugin.routes ?? [])
+			.find((r) => r.path === "/channels/:provider/webhook");
+		if (!route) throw new Error("expected the bare webhook route");
+
+		const res = await route.handler({
+			claw,
+			params: { provider: "telegram" },
+			request: {
+				method: "POST",
+				url: "https://host/channels/telegram/webhook",
+				headers: {
+					get: (name: string) =>
+						name === "x-telegram-bot-api-secret-token"
+							? telegramWebhookSecret("env-token")
+							: null,
+				},
+				json: async () => JSON.parse(update) as unknown,
+				text: async () => update,
+			},
+		});
+		// verified (the reader-resolved token derived the webhook secret) and replied on that same token
+		expect(res.status).toBe(200);
+		expect(apiCalls.some((url) => url.includes("/botenv-token/"))).toBe(true);
 	});
 
-	it("resolves the token from TELEGRAM_BOT_TOKEN at startup", () => {
-		vi.stubEnv("TELEGRAM_BOT_TOKEN", "env-token");
-		try {
-			expect(() => channels([telegram()])).not.toThrow();
-		} finally {
-			vi.unstubAllEnvs();
-		}
+	it("fails loud on first traffic — not at startup — when an app bot has no token anywhere", async () => {
+		const db = memoryAdapter();
+		// construction succeeds: the app-bot token now resolves lazily (async, through the one-door
+		// reader available only at configure), so a missing token can no longer be caught at startup.
+		const claw = createClaw({
+			database: db,
+			model: textModel("pong"),
+			redactor: createStoredRedactor({
+				detector: noopDetector,
+				mappings: createPiiMappingStore(db),
+			}),
+			secrets: [env({ source: {} })], // the reader resolves nothing
+			plugins: [channels([telegram()])],
+		});
+		const route = (claw.$context.plugins ?? [])
+			.flatMap((plugin) => plugin.routes ?? [])
+			.find((r) => r.path === "/channels/:provider/webhook");
+		if (!route) throw new Error("expected the bare webhook route");
+
+		const update = JSON.stringify({
+			update_id: 1,
+			message: { message_id: 2, text: "hi", chat: { id: 42 } },
+		});
+		// the same "telegram bot has no token" configurationError, relocated from startup to first traffic
+		await expect(
+			route.handler({
+				claw,
+				params: { provider: "telegram" },
+				request: {
+					method: "POST",
+					url: "https://host/channels/telegram/webhook",
+					headers: { get: () => "anything" },
+					json: async () => JSON.parse(update) as unknown,
+					text: async () => update,
+				},
+			}),
+		).rejects.toThrow(/telegram bot has no token/);
 	});
 
 	it("keeps bare telegram() valid as a connections transport — no startup token check", () => {

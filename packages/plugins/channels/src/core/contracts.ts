@@ -7,6 +7,7 @@ import type {
 	BindConversationClawInput,
 	BindConversationThreadInput,
 	JsonValue,
+	Secrets,
 } from "@euroclaw/contracts";
 
 export const channelEndpointModeValues = ["webhook", "poll"] as const;
@@ -54,6 +55,14 @@ export type EndpointContext = {
 	secret?: string;
 	/** Inbound verification secret from a connection row — `verify` checks it before code config. */
 	webhookSecret?: string;
+	/**
+	 * The one-door secret reader (`@euroclaw/secrets`) the channels plugin threads from its
+	 * `configure(context.secrets)`, so a code-declared APP bot resolves its OWN token (the app-bot
+	 * fallback) through `secrets.get(name)` — honouring an org's aliases/providers instead of a raw
+	 * env read. Set only on app-bot endpoints; a registered connection carries its token in `secret`
+	 * (above) and never sets this — the connection path is unchanged.
+	 */
+	secrets?: Secrets;
 	/** Poll cursor from the endpoint's persisted state. */
 	cursor?: JsonValue;
 	/**

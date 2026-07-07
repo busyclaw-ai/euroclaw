@@ -196,6 +196,9 @@ importers:
       '@euroclaw/core':
         specifier: workspace:*
         version: link:../../foundation/core
+      '@euroclaw/secrets':
+        specifier: workspace:*
+        version: link:../../foundation/secrets
       '@euroclaw/storage-core':
         specifier: workspace:*
         version: link:../../storage/core

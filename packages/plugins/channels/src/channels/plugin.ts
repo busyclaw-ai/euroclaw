@@ -6,6 +6,7 @@ import {
 	type EuroclawPluginConfigureContext,
 	type EuroclawRoute,
 	type EuroclawRouteContext,
+	type Secrets,
 } from "@euroclaw/contracts";
 import { requireClaw } from "../core/claw";
 import {
@@ -210,15 +211,20 @@ export function channels<const List extends readonly PollAware[]>(
 ): ChannelsPlugin<ChannelsCronFlag<List>> {
 	// buildChannelsPlugin sets $HasCron at runtime from the same poll-endpoint check AnyPoll folds at
 	// the type level, so this narrowing cast is sound — the one seam between runtime and the typed flag.
-	return buildChannelsPlugin(list, options, undefined) as ChannelsPlugin<
-		ChannelsCronFlag<List>
-	>;
+	// No store and no secrets reader yet: both arrive at configure (the assembly's seam).
+	return buildChannelsPlugin(
+		list,
+		options,
+		undefined,
+		undefined,
+	) as ChannelsPlugin<ChannelsCronFlag<List>>;
 }
 
 function buildChannelsPlugin(
 	list: readonly Channel[],
 	options: ChannelsPluginOptions,
 	store: ChannelEndpointStateStore | undefined,
+	secrets: Secrets | undefined,
 ): ChannelsPlugin {
 	assertUniqueChannelKeys(list);
 	// Every channel here is an app bot — fail at startup, not on first traffic, if one is unusable
@@ -251,16 +257,21 @@ function buildChannelsPlugin(
 		if (store) return undefined;
 		const adapter = contextAdapter(context);
 		if (!adapter) return undefined;
+		// Capture the one-door reader here — the only place it's in scope — and hand it to the rebuilt
+		// plugin so contextFor can thread it to each app bot's lazy token resolution.
 		return buildChannelsPlugin(
 			list,
 			options,
 			createChannelEndpointStateStore(adapter, { now }),
+			context.secrets,
 		);
 	};
 
-	// A bot's normalized view: no secrets (the client lives on the channel), no bind defaults
-	// (conversations create bare personal claws — placement is the host's logic through the public
-	// bindConversation api), cursor from the state row under the bot's key.
+	// A bot's normalized view: no per-connection secret VALUE (an app bot keeps its client in memory),
+	// but it DOES carry the one-door secret READER so the channel can resolve its own token lazily
+	// (secrets.get) on the send/webhook path; no bind defaults (conversations create bare personal
+	// claws — placement is the host's logic through the public bindConversation api); cursor from the
+	// state row under the bot's key.
 	const contextFor = async (channel: Channel): Promise<EndpointContext> => {
 		const state = await requireStore().get({
 			provider: channel.provider,
@@ -271,6 +282,7 @@ function buildChannelsPlugin(
 			endpointKey: keyOf(channel),
 			mode: channel.mode,
 			cursor: state?.cursor,
+			secrets,
 		};
 	};
 

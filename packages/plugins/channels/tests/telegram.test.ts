@@ -1,3 +1,4 @@
+import { buildSecrets, env } from "@euroclaw/secrets";
 import { describe, expect, it } from "vitest";
 import {
 	dispatchWebhook,
@@ -10,11 +11,29 @@ import {
 	telegramWebhookSecret,
 } from "../src/telegram/index";
 
+// The app bot resolves its token ONLY through the one-door reader the plugin threads onto the endpoint.
+// This shared reader resolves the unnamed bot's TELEGRAM_BOT_TOKEN to "app-token" — what the derived
+// verify secret and the /botapp-token/ URLs below check against.
+const appTokenSecrets = buildSecrets([
+	env({ source: { TELEGRAM_BOT_TOKEN: "app-token" } }),
+]);
+
 const endpoint: EndpointContext = {
 	provider: "telegram",
 	endpointKey: "default",
 	mode: "webhook",
+	secrets: appTokenSecrets,
 };
+
+/** An app-bot endpoint (the default key) carrying a one-door reader — what the plugin threads. */
+function appEndpoint(secrets: EndpointContext["secrets"]): EndpointContext {
+	return {
+		provider: "telegram",
+		endpointKey: "default",
+		mode: "webhook",
+		secrets,
+	};
+}
 
 /** A fake Bot API server: records every call and serves canned getUpdates results. */
 function fakeApi() {
@@ -87,19 +106,19 @@ describe("telegram channel", () => {
 		).toThrow(/invalid JSON/);
 	});
 
-	it("verifies against the secret derived from the bot token — no second credential", () => {
-		const channel = telegram({ token: "app-token", fetch: fakeApi().fetch });
+	it("verifies against the secret derived from the bot token — no second credential", async () => {
+		const channel = telegram({ fetch: fakeApi().fetch });
 		const headers = (value: string | null) => ({
 			request: { headers: { get: () => value }, rawBody: "{}" },
 			endpoint,
 		});
-		expect(channel.verify?.(headers(telegramWebhookSecret("app-token")))).toBe(
-			true,
-		);
-		expect(channel.verify?.(headers("wrong"))).toBe(false);
+		expect(
+			await channel.verify?.(headers(telegramWebhookSecret("app-token"))),
+		).toBe(true);
+		expect(await channel.verify?.(headers("wrong"))).toBe(false);
 	});
 
-	it("derives a registered connection's secret from its row token, unless webhookSecret overrides", () => {
+	it("derives a registered connection's secret from its row token, unless webhookSecret overrides", async () => {
 		const channel = telegram(); // bare transport — nothing configured in code
 		const row = (
 			overrides: Partial<EndpointContext>,
@@ -121,32 +140,145 @@ describe("telegram channel", () => {
 
 		// derived from the row's bot token
 		const derived = row({ secret: "row-token" });
-		expect(channel.verify?.(derived(telegramWebhookSecret("row-token")))).toBe(
-			true,
-		);
-		expect(channel.verify?.(derived("wrong"))).toBe(false);
+		expect(
+			await channel.verify?.(derived(telegramWebhookSecret("row-token"))),
+		).toBe(true);
+		expect(await channel.verify?.(derived("wrong"))).toBe(false);
 
 		// an explicit webhookSecret on the row wins over derivation
 		const explicit = row({ secret: "row-token", webhookSecret: "chosen" });
-		expect(channel.verify?.(explicit("chosen"))).toBe(true);
-		expect(channel.verify?.(explicit(telegramWebhookSecret("row-token")))).toBe(
-			false,
+		expect(await channel.verify?.(explicit("chosen"))).toBe(true);
+		expect(
+			await channel.verify?.(explicit(telegramWebhookSecret("row-token"))),
+		).toBe(false);
+	});
+
+	it("fails closed when a connection has no token to derive a secret from", async () => {
+		const channel = telegram();
+		// a registered connection (not the app-bot key) with neither a stored secret nor a
+		// webhookSecret — nothing to verify against, so fail closed and loud. (The app bot's own
+		// no-token case fails loud with "telegram bot has no token" — covered below.)
+		await expect(
+			channel.verify?.({
+				request: { headers: { get: () => null }, rawBody: "{}" },
+				endpoint: {
+					provider: "telegram",
+					endpointKey: "acme-bot",
+					mode: "webhook",
+				},
+			}),
+		).rejects.toThrow(/no secret/);
+	});
+
+	it("resolves the app bot's token through the one-door reader (secrets.get)", async () => {
+		const secrets = buildSecrets([
+			env({ source: { TELEGRAM_BOT_TOKEN: "env-token" } }),
+		]);
+		const api = fakeApi();
+		const channel = telegram({ fetch: api.fetch }); // no inline token — the reader supplies it
+		const ep = appEndpoint(secrets);
+		// verify derives its secret from the reader-resolved token
+		expect(
+			await channel.verify?.({
+				request: {
+					headers: { get: () => telegramWebhookSecret("env-token") },
+					rawBody: "{}",
+				},
+				endpoint: ep,
+			}),
+		).toBe(true);
+		// and send puts that same (memoized) resolved token on the wire
+		await channel.send({
+			message: { externalConversationId: "1", text: "hi" },
+			endpoint: ep,
+		});
+		expect(api.calls[0]?.url).toBe(
+			"https://api.telegram.org/botenv-token/sendMessage",
 		);
 	});
 
-	it("fails closed when there is no token to derive a secret from", () => {
-		const channel = telegram();
-		expect(() =>
-			channel.verify?.({
-				request: { headers: { get: () => null }, rawBody: "{}" },
-				endpoint,
+	it("honours a secrets alias remap for the app bot's token", async () => {
+		const secrets = buildSecrets([
+			env({
+				aliases: { TELEGRAM_BOT_TOKEN: "PROD_TELEGRAM" },
+				source: { PROD_TELEGRAM: "prod-token" },
 			}),
-		).toThrow(/no secret/);
+		]);
+		const channel = telegram();
+		expect(
+			await channel.verify?.({
+				request: {
+					headers: { get: () => telegramWebhookSecret("prod-token") },
+					rawBody: "{}",
+				},
+				endpoint: appEndpoint(secrets),
+			}),
+		).toBe(true);
+	});
+
+	it("resolves a named bot's token under its own tokenRef, not the base name", async () => {
+		// two secrets in one reader: the base name AND the named bot's ref — the named bot must read
+		// its ref, never the base, so two bots can't collide.
+		const secrets = buildSecrets([
+			env({
+				source: {
+					TELEGRAM_BOT_TOKEN: "default-token",
+					SALES_BOT: "sales-token",
+				},
+			}),
+		]);
+		const api = fakeApi();
+		const channel = telegram({
+			name: "sales",
+			tokenRef: "SALES_BOT",
+			fetch: api.fetch,
+		});
+		// the named bot's endpoint key is its name; it resolves SALES_BOT → "sales-token"
+		const salesEndpoint: EndpointContext = {
+			provider: "telegram",
+			endpointKey: "sales",
+			mode: "webhook",
+			secrets,
+		};
+		expect(
+			await channel.verify?.({
+				request: {
+					headers: { get: () => telegramWebhookSecret("sales-token") },
+					rawBody: "{}",
+				},
+				endpoint: salesEndpoint,
+			}),
+		).toBe(true);
+		await channel.send({
+			message: { externalConversationId: "1", text: "hi" },
+			endpoint: salesEndpoint,
+		});
+		expect(api.calls[0]?.url).toBe(
+			"https://api.telegram.org/botsales-token/sendMessage",
+		);
+	});
+
+	it("fails loud when the reader resolves no token for the app bot", async () => {
+		const secrets = buildSecrets([env({ source: {} })]); // reader resolves nothing
+		const channel = telegram();
+		await expect(
+			channel.send({
+				message: { externalConversationId: "1", text: "hi" },
+				endpoint: appEndpoint(secrets),
+			}),
+		).rejects.toThrow(/telegram bot has no token/);
+		// verify on the same app bot fails loud identically (the memoized miss, not a fresh lookup)
+		await expect(
+			channel.verify?.({
+				request: { headers: { get: () => "anything" }, rawBody: "{}" },
+				endpoint: appEndpoint(secrets),
+			}),
+		).rejects.toThrow(/telegram bot has no token/);
 	});
 
 	it("sends a reply through the Bot API with the reply-to message id", async () => {
 		const api = fakeApi();
-		const channel = telegram({ token: "app-token", fetch: api.fetch });
+		const channel = telegram({ fetch: api.fetch });
 		await channel.send({
 			message: {
 				externalConversationId: "123",
@@ -171,7 +303,6 @@ describe("telegram channel", () => {
 		];
 		const channel = telegram({
 			mode: "poll",
-			token: "app-token",
 			fetch: api.fetch,
 		});
 		const result = await channel.poll?.({
@@ -203,8 +334,8 @@ describe("telegram channel", () => {
 
 	it("never serves a connection with the app bot's token, even under a colliding key", async () => {
 		const api = fakeApi();
-		// the transport carries a code token (allowed as a fallback config) — the adversarial case
-		const channel = telegram({ fetch: api.fetch, token: "app-token" });
+		// the app bot could resolve its own token for the "default" key — the adversarial case
+		const channel = telegram({ fetch: api.fetch });
 		await channel.send({
 			message: { externalConversationId: "9", text: "reply" },
 			endpoint: {
@@ -221,9 +352,9 @@ describe("telegram channel", () => {
 		);
 	});
 
-	it("errors clearly on an endpoint with neither a code token nor a stored secret", async () => {
-		const channel = telegram({ token: "app-token", fetch: fakeApi().fetch });
-		// a key the code token doesn't cover, and no row credential to fall back on
+	it("errors clearly on an endpoint with neither an app-bot key nor a stored secret", async () => {
+		const channel = telegram({ fetch: fakeApi().fetch });
+		// a key the app bot doesn't own, and no row credential to fall back on
 		const unknown: EndpointContext = {
 			provider: "telegram",
 			endpointKey: "other-bot",
@@ -236,7 +367,7 @@ describe("telegram channel", () => {
 
 	it("relays a telegram webhook end to end and replies through the Bot API", async () => {
 		const api = fakeApi();
-		const channel = telegram({ token: "app-token", fetch: api.fetch });
+		const channel = telegram({ fetch: api.fetch });
 		const events: EndpointEvent[] = [];
 		const claw = {
 			api: {

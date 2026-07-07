@@ -84,25 +84,29 @@ describe("channelConnections cron-handler requirement", () => {
 describe("channel naming requirement", () => {
 	test("two bots of one provider need distinct names, statically", () => {
 		// @ts-expect-error — duplicate (provider, name) key: both are telegram:default
-		channels([telegram({ token: "a" }), telegram({ token: "b" })]);
-		// a named second bot compiles
-		channels([
-			telegram({ token: "a" }),
-			telegram({ token: "b", name: "sales" }),
-		]);
+		channels([telegram({}), telegram({})]);
+		// a named second bot compiles (a named bot names its own token via tokenRef)
+		channels([telegram({}), telegram({ name: "sales", tokenRef: "SALES" })]);
 		// @ts-expect-error — two bots under the same name collide too
 		channels([
-			telegram({ token: "a", name: "sales" }),
-			telegram({ token: "b", name: "sales" }),
+			telegram({ name: "sales", tokenRef: "A" }),
+			telegram({ name: "sales", tokenRef: "B" }),
 		]);
+	});
+
+	test("a named bot must carry its own tokenRef, statically", () => {
+		// @ts-expect-error — a named app bot requires tokenRef, so two named bots can't collide on a secret
+		channels([telegram({ name: "sales" })]);
+		// with a tokenRef it compiles
+		channels([telegram({ name: "sales", tokenRef: "SALES" })]);
 	});
 
 	test("a name must be a URL path segment, statically", () => {
 		// @ts-expect-error — "/" is not a path-segment character
-		channels([telegram({ token: "t", name: "connections/sneaky" })]);
+		channels([telegram({ name: "connections/sneaky", tokenRef: "R" })]);
 		// @ts-expect-error — neither is a space
-		channels([telegram({ token: "t", name: "sales bot" })]);
+		channels([telegram({ name: "sales bot", tokenRef: "R" })]);
 		// the full segment alphabet compiles
-		channels([telegram({ token: "t", name: "Sales_bot-2" })]);
+		channels([telegram({ name: "Sales_bot-2", tokenRef: "R" })]);
 	});
 });

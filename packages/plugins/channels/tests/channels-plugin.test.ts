@@ -1,3 +1,5 @@
+import type { Secrets } from "@euroclaw/contracts";
+import { buildSecrets, env } from "@euroclaw/secrets";
 import { memoryAdapter, schemaAdapter } from "@euroclaw/storage-core";
 import { describe, expect, it } from "vitest";
 import { type Channel, channels, channelsSchema } from "../src/index";
@@ -24,10 +26,11 @@ function fakeClaw(binds: unknown[]) {
 	};
 }
 
-/** Configure the plugin against a wrapped adapter — what the createClaw assembly does. */
-function configured(plugin: ReturnType<typeof channels>) {
+/** Configure the plugin against a wrapped adapter and the one-door reader — what createClaw does. */
+function configured(plugin: ReturnType<typeof channels>, secrets?: Secrets) {
 	const built = plugin.configure?.({
 		adapter: schemaAdapter(memoryAdapter(), channelsSchema),
+		secrets,
 	});
 	if (!built) throw new Error("expected configure to build the plugin");
 	return built;
@@ -54,10 +57,20 @@ const update = JSON.stringify({
 describe("channels plugin — named bots (the genericOAuth model)", () => {
 	it("routes the unnamed and each named bot to their own webhook paths", async () => {
 		const binds: unknown[] = [];
+		// each bot resolves its OWN token via the one-door reader: the unnamed bot under the base name,
+		// the named bot under its tokenRef — so the two never collide on one secret.
 		const plugin = configured(
 			channels([
-				telegram({ token: "support-token" }),
-				telegram({ token: "sales-token", name: "sales" }),
+				telegram({}),
+				telegram({ name: "sales", tokenRef: "TELEGRAM_BOT_TOKEN_SALES" }),
+			]),
+			buildSecrets([
+				env({
+					source: {
+						TELEGRAM_BOT_TOKEN: "support-token",
+						TELEGRAM_BOT_TOKEN_SALES: "sales-token",
+					},
+				}),
 			]),
 		);
 		const [bare, named] = plugin.routes ?? [];
@@ -112,13 +125,13 @@ describe("channels plugin — named bots (the genericOAuth model)", () => {
 	it("runtime-rejects a non-segment bot name (the compile-time walk's mirror)", () => {
 		// widened to Channel[] so the literal-name walk can't see it — runtime must
 		const bad: Channel[] = [
-			telegram({ token: "t", name: "connections/sneaky" }),
+			telegram({ name: "connections/sneaky", tokenRef: "SNEAKY" }),
 		];
 		expect(() => channels(bad)).toThrow(/invalid channel name/);
 	});
 
 	it("mounts no named route when every bot is unnamed", () => {
-		const plugin = channels([telegram({ token: "only" })]);
+		const plugin = channels([telegram({})]);
 		expect(plugin.routes?.map((route) => route.path)).toEqual([
 			"/channels/:provider/webhook",
 		]);
