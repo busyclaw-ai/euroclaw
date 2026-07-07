@@ -240,6 +240,12 @@ function buildChannelsPlugin(
 	const pollTargets = list.filter(
 		(channel) => channel.supports.poll && channel.mode === "poll",
 	);
+	// Aggregate each app bot's declared secret name(s) so the assembly's required-names list enumerates
+	// them (boot coverage + claw.api.secrets.list). App-bot tokens resolve via the one-door reader — the
+	// declaration is the enumerable half; connections declare nothing (their tokens live in the rows).
+	const declaredSecrets = list.flatMap(
+		(channel) => channel.declaredSecrets ?? [],
+	);
 
 	const requireStore = (): ChannelEndpointStateStore => {
 		if (!store) {
@@ -361,6 +367,7 @@ function buildChannelsPlugin(
 		id: options.id ?? "euroclaw.channels",
 		$HasCron: pollTargets.length > 0 ? "has-cron" : "no-cron",
 		schema: channelsModels,
+		...(declaredSecrets.length > 0 ? { secrets: declaredSecrets } : {}),
 		configure,
 		routes: hasWebhook ? webhookRoutes : [],
 		cron: pollTargets.length > 0 ? [pollTask] : [],

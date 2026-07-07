@@ -16,6 +16,7 @@ export {
 	runCheckpointSchema,
 	teamSchema,
 } from "./schema";
+export { createSecretAliasStore } from "./secret-alias";
 export type {
 	TeamInvite,
 	TeamMember,

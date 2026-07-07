@@ -132,6 +132,7 @@ describe("createClaw engine", () => {
 			"putPolicySlice",
 			"registerOpenApiSpec",
 			"run",
+			"secrets",
 			"sendMessage",
 			"startRun",
 			"updateClaw",

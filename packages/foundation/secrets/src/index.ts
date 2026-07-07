@@ -10,12 +10,14 @@
 // Node-oriented and overridable.
 //
 // The alias + chain layers here ARE the "deployment alias" + "registry" precedence from the spec.
-// The per-org connection layer sits ABOVE this (a later slice) — do not add it here.
-// See docs/plans/secrets-provider-registry.md.
+// The per-org DB-alias layer sits ABOVE this and is OPT-IN: pass `buildSecrets(providers, { aliases })`
+// and a per-org pointer WINS over the inline chain. Absent it, resolution is exactly as before —
+// buildSecrets stays back-compatible. See docs/plans/secrets-per-org-aliases.md.
 
 import {
 	configurationError,
 	type ResolveContext,
+	type SecretAliasPointer,
 	type SecretMaterial,
 	type SecretProvider,
 	type Secrets,
@@ -51,18 +53,43 @@ export function env(options: EnvOptions = {}): SecretProvider {
 	};
 }
 
+/** A per-org DB-alias lookup the resolver consults BEFORE the inline chain — a plain closure so
+ *  @euroclaw/secrets stays storage-agnostic (the alias store lives in @euroclaw/storage-durable).
+ *  Returns the pointer for `(organizationId, name)`, or `null` when the org has no alias for it.
+ *  THROWS for infrastructure failure (e.g. the `secret_alias` table isn't migrated) — the resolver
+ *  propagates that loud rather than falling through to a possibly-WRONG credential. */
+export type SecretAliasLookup = (
+	organizationId: string,
+	name: string,
+) => Promise<SecretAliasPointer | null>;
+
+export type BuildSecretsOptions = {
+	/** Opt-in per-org DB-alias layer. When present, `get(name, { organizationId })` first asks it for
+	 *  a pointer; a hit WINS (routes `registry[pointer.provider].get(pointer.ref)`), no fall-through.
+	 *  Absent org ⇒ the layer is skipped (deployment default only). */
+	aliases?: SecretAliasLookup;
+};
+
 /**
  * Build the one-door resolver over an ordered provider chain. The default `[env()]` IS the "absent
  * `secrets` → read env" default: `buildSecrets()` returns an env-backed resolver with zero config.
  *
- * `get(name, ctx)` — for each provider IN ORDER: remap the canonical `name` through that provider's
- * own `aliases` (pass-through when absent), then `await provider.get(key, ctx)`; the FIRST non-null
- * material wins. `null` when no provider resolves it — the caller fails loud if it required it.
+ * `get(name, ctx)`:
+ *   0. **per-org DB alias** (only with `options.aliases` AND `ctx.organizationId`): look up a pointer;
+ *      a hit is resolved through `registry[pointer.provider].get(pointer.ref)` and WINS — its material
+ *      (or `null`) is returned, never falling through to the chain. The org pointed here explicitly.
+ *   1. else **inline chain**: for each provider IN ORDER remap the canonical `name` through that
+ *      provider's own `aliases` (pass-through when absent), then `await provider.get(key, ctx)`; the
+ *      FIRST non-null material wins.
+ * `null` when nothing resolves it — the caller fails loud if it required it.
  *
  * Provider `name`s must be DISTINCT across the chain — a duplicate is a `configurationError` thrown
  * loud at build time (the connection/audit key must be unambiguous).
  */
-export function buildSecrets(providers: SecretProvider[] = [env()]): Secrets {
+export function buildSecrets(
+	providers: SecretProvider[] = [env()],
+	options: BuildSecretsOptions = {},
+): Secrets {
 	const seen = new Set<string>();
 	for (const provider of providers) {
 		if (seen.has(provider.name)) {
@@ -73,11 +100,27 @@ export function buildSecrets(providers: SecretProvider[] = [env()]): Secrets {
 		}
 		seen.add(provider.name);
 	}
+	const providerByName = new Map(providers.map((p) => [p.name, p]));
+	const { aliases } = options;
 
 	const get = async (
 		name: string,
 		ctx: ResolveContext = {},
 	): Promise<SecretMaterial | null> => {
+		// Layer 0 — DB-wins. Only with the per-org layer AND an org in context. A missing table throws
+		// out of `aliases` (fail loud); a real pointer is resolved through its provider and returned as
+		// the answer, hit or miss — we do NOT fall through, or a stale/wrong direct value could win.
+		if (aliases && ctx.organizationId !== undefined) {
+			const pointer = await aliases(ctx.organizationId, name);
+			if (pointer) {
+				const provider = providerByName.get(pointer.provider);
+				// A dangling pointer (provider not in the chain) resolves to null — the caller fails loud
+				// with a configure-your-credential error rather than silently using another provider.
+				if (!provider) return null;
+				// pointer.ref is already the backend key — the provider's own alias remap does NOT apply.
+				return provider.get(pointer.ref, ctx);
+			}
+		}
 		for (const provider of providers) {
 			const key = provider.aliases?.[name] ?? name;
 			const material = await provider.get(key, ctx);

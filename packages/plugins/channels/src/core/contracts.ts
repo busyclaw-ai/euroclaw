@@ -7,6 +7,7 @@ import type {
 	BindConversationClawInput,
 	BindConversationThreadInput,
 	JsonValue,
+	SecretDeclaration,
 	Secrets,
 } from "@euroclaw/contracts";
 
@@ -121,6 +122,15 @@ export interface Channel {
 	readonly supports: { readonly webhook: boolean; readonly poll: boolean };
 	/** The app bot's transport. */
 	readonly mode: ChannelEndpointMode;
+	/**
+	 * The secret name(s) this transport's APP bot resolves through the one-door reader
+	 * (`secrets.get(name)`) — e.g. telegram's `tokenRef ?? "TELEGRAM_BOT_TOKEN"`. The `channels`
+	 * plugin AGGREGATES these into its `plugin.secrets` declarations so the required-names list
+	 * (`claw.api.secrets.list` / boot coverage) enumerates them. `channelConnections` deliberately
+	 * does NOT — a registered connection's token lives in its row (`endpoint.secret`), not a
+	 * `secrets.get` name. Absent for a pure transport with no app-bot credential of its own.
+	 */
+	readonly declaredSecrets?: readonly SecretDeclaration[];
 	/**
 	 * Assert the code-declared configuration is usable (credentials present after env fallbacks).
 	 * channels() calls this at construction so a dead app bot fails at startup, not on first traffic;

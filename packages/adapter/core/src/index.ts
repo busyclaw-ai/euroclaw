@@ -419,7 +419,13 @@ async function callApiRoute(input: {
 	);
 }
 
-export function createClawClient(options: ClawClientOptions = {}): ClawApi {
+// The generic client covers the FLAT routed methods (clawApiRouteList / ClawApiMethod). It does NOT
+// include the nested `claw.api.secrets` namespace — that is a server-side product surface the host
+// wires to its own frontend HTTP layer (see docs/plans/secrets-per-org-aliases.md), so it is excluded
+// from ClawApiMethod and from the generic route machinery here.
+export function createClawClient(
+	options: ClawClientOptions = {},
+): Pick<ClawApi, ClawApiMethod> {
 	const baseUrl = normalizeBaseUrl(options.baseUrl);
 	const clientFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
 	return Object.fromEntries(
@@ -436,7 +442,7 @@ export function createClawClient(options: ClawClientOptions = {}): ClawApi {
 					routeMethod: route.httpMethod,
 				}),
 		]),
-	) as ClawApi;
+	) as Pick<ClawApi, ClawApiMethod>;
 }
 
 function pluginRoutes(

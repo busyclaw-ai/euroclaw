@@ -22,7 +22,7 @@ import type { ClawsStore } from "../claws/contracts";
 import type { EffectStore } from "../effects";
 import type { EntityField } from "../entity";
 import type { EventSink } from "../events";
-import type { Secrets } from "../tools/secrets";
+import type { SecretDeclaration, Secrets } from "../tools/secrets";
 import type { AfterGate, BoundaryGate, Gate } from "./boundary";
 import type { ReasonCode } from "./reason-codes";
 
@@ -123,6 +123,10 @@ export type EuroclawPlugin<
 	schema?: {
 		readonly [model: string]: { readonly fields: Record<string, EntityField> };
 	};
+	/** Secret names this plugin needs — the enumerable half of runtime `secrets.get`. The assembly
+	 *  collects these across plugins into the required-names set (boot coverage + `claw.api.secrets`).
+	 *  Always-on: needs no table, runs whether or not `dynamicSecretAliases` is enabled. */
+	secrets?: readonly SecretDeclaration[];
 	/** Before-gates this plugin installs (decide). */
 	gates?: Gate[];
 	/** Boundary before-gates this plugin installs (decide across tool/model boundaries). */

@@ -82,3 +82,9 @@ export type Secrets = {
 	get: (name: string, ctx?: ResolveContext) => Promise<SecretMaterial | null>;
 	has: (name: string, ctx?: ResolveContext) => Promise<boolean>;
 };
+
+/** A secret NAME a plugin needs — the enumerable half of the runtime `secrets.get(name)`. Plugins
+ *  declare these on `plugin.secrets`; the assembly collects them across plugins into the required-
+ *  names set the boot coverage warning walks and `claw.api.secrets.list()` surfaces. Declaration
+ *  only — a declared name may still be configured later at runtime (never fails boot). */
+export type SecretDeclaration = { name: string; description?: string };

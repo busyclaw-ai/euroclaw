@@ -198,6 +198,17 @@ export function telegram(
 	// default for the single unnamed bot.
 	const appTokenSecret = tokenRef ?? DEFAULT_APP_BOT_TOKEN_SECRET;
 
+	// The app-bot secret DECLARATION — the `channels` plugin aggregates it into `plugin.secrets` so the
+	// required-names list enumerates this bot's token. (channelConnections ignores it: a connection's
+	// token lives in its row, not under a `secrets.get` name.)
+	const declaredSecret = {
+		name: appTokenSecret,
+		description:
+			name !== undefined
+				? `Telegram bot token for "${name}"`
+				: "Telegram app-bot token",
+	};
+
 	// The app bot's OWN token, resolved lazily through the one-door reader threaded onto the endpoint
 	// (secrets.get(appTokenSecret)) — euroclaw keeps no token in code, so an org's aliases/providers
 	// are honoured. Memoized because one webhook needs it twice — the derived verify secret and the
@@ -259,6 +270,7 @@ export function telegram(
 		name,
 		supports: { webhook: true, poll: true },
 		mode,
+		declaredSecrets: [declaredSecret],
 		// Phantom-ish marker read by channels() at the type level; its runtime value tracks the mode.
 		$poll: mode === "poll",
 
