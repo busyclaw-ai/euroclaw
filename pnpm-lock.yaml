@@ -74,6 +74,9 @@ importers:
       '@euroclaw/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@euroclaw/secrets':
+        specifier: workspace:*
+        version: link:../foundation/secrets
       '@euroclaw/storage-durable':
         specifier: workspace:*
         version: link:../storage/durable

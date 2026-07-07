@@ -31,6 +31,7 @@
 		"@euroclaw/contracts": "workspace:*",
 		"@euroclaw/engine-sql": "workspace:*",
 		"@euroclaw/runtime": "workspace:*",
+		"@euroclaw/secrets": "workspace:*",
 		"@euroclaw/storage-durable": "workspace:*",
 		"@euroclaw/storage-kysely": "workspace:*",
 		"@euroclaw/vendors": "workspace:*",

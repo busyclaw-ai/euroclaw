@@ -11,7 +11,9 @@ import {
 	type EuroclawPluginConfigureContext,
 	type InferPluginApi,
 	ORGANIZATION_CONTEXT_KEY,
+	type SecretProvider,
 	type SecretResolver,
+	type Secrets,
 } from "@euroclaw/contracts";
 import {
 	createRegisteredToolProvider,
@@ -22,6 +24,7 @@ import {
 	type RuntimeConfig,
 	type RuntimeEventSink,
 } from "@euroclaw/runtime";
+import { buildSecrets, env } from "@euroclaw/secrets";
 import { schemaAdapter } from "@euroclaw/storage-core";
 import {
 	createClawsStore,
@@ -90,10 +93,16 @@ export type ClawConfig<Config extends RuntimeConfig = RuntimeConfig> = Omit<
 	>;
 	events?: RuntimeEventSink | readonly RuntimeEventSink[];
 	models?: ClawModelsConfig;
-	/** The credential seam registered-tool invocation resolves against. euroclaw stores no secrets;
-	 *  the host wires this to its vault/env/SSM adapter. Absent ⇒ authed registered tools fail loud
-	 *  (a null-material resolver); public registered tools still work. `resolveTools` is built by the
-	 *  assembly from the org's rows + this resolver — hosts never set it directly. */
+	/** The ordered secret-provider chain the one-door reader resolves through (`@euroclaw/secrets`).
+	 *  Absent ⇒ `[env()]` (read the env global); `[]` is explicit-none (nothing resolves). The reader
+	 *  is built once and both backs registered-tool credentials (below) and is injected into the plugin
+	 *  configure context. */
+	secrets?: SecretProvider[];
+	/** Escape-hatch credential resolver for registered-tool invocation — wins over the `secrets`
+	 *  reader when provided. euroclaw stores no secrets; absent ⇒ credentials resolve through the
+	 *  `secrets` reader (env-backed by default), and a still-unresolved credential fails loud at call
+	 *  time (the invoker's null-vs-configured contract). `resolveTools` is built by the assembly from
+	 *  the org's rows + this resolver — hosts never set it directly. */
 	resolveSecret?: SecretResolver;
 	stores?: ClawStores;
 };
@@ -305,9 +314,19 @@ function createPluginApi(input: {
 	return out;
 }
 
-// No host resolveSecret ⇒ every credential is "not configured": public registered tools work,
-// authed ones fail loud at call time (the invoker's null-vs-configured contract).
-const nullSecretResolver: SecretResolver = () => null;
+// Bridge the one-door reader to the invoker's per-requirement resolver. The credential NAME is the
+// registration `source` (unique per registration); the requirement's `scheme` is NOT part of the
+// name — it is apply-only (the invoker reads how to place the material from the spec's securityScheme).
+// KNOWN LIMITATION: name = source assumes ONE credential per registration. A spec that declares
+// multiple distinct-credential securitySchemes would collide on `source` — the fix is a
+// per-registration credential-name override (a later slice). Do NOT build the override here.
+const secretsBackedResolver =
+	(secrets: Secrets): SecretResolver =>
+	(req) =>
+		secrets.get(req.source, {
+			organizationId: req.organizationId,
+			actor: req.actor,
+		});
 
 /**
  * Build the per-run tool resolver for an organization's registered rows: synthesize its rows into
@@ -317,10 +336,10 @@ const nullSecretResolver: SecretResolver = () => null;
  */
 function registeredToolResolver(
 	stores: RegistryStores,
-	resolveSecret: SecretResolver | undefined,
+	resolveSecret: SecretResolver,
 ): NonNullable<RuntimeConfig["resolveTools"]> {
 	const provider = createRegisteredToolProvider({
-		resolveSecret: resolveSecret ?? nullSecretResolver,
+		resolveSecret,
 	});
 	return async (ctx) => {
 		const organizationId = ctx[ORGANIZATION_CONTEXT_KEY];
@@ -345,6 +364,9 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 		? resolveDatabase(config.database)
 		: undefined;
 	const pluginList = (config.plugins ?? []) as readonly EuroclawPlugin[];
+	// The one door every subsystem resolves credentials through, built once from the provider chain.
+	// `??` not `||` — an explicit `secrets: []` stays none; only an ABSENT `secrets` defaults to env.
+	const secrets: Secrets = buildSecrets(config.secrets ?? [env()]);
 	// Fail fast at init if any plugin/host schema collides with a core column — the same collection the
 	// `generate` CLI runs, so a bad registration surfaces here, not at migration time. The merged
 	// tables also drive the schema-aware adapter handed to plugins below.
@@ -374,9 +396,13 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 	const registryStores =
 		config.stores?.registry ??
 		(adapter ? createRegistryStores(adapter) : undefined);
-	// Registered tools become executable per run (see registeredToolResolver above).
+	// Registered tools become executable per run (see registeredToolResolver above). Absent
+	// `resolveSecret` ⇒ the env-backed one-door reader; `resolveSecret` stays the escape hatch.
 	const resolveTools = registryStores
-		? registeredToolResolver(registryStores, config.resolveSecret)
+		? registeredToolResolver(
+				registryStores,
+				config.resolveSecret ?? secretsBackedResolver(secrets),
+			)
 		: undefined;
 	const eventSinks = [
 		...(clawsStore ? [createClawRuntimeEventSink(clawsStore)] : []),
@@ -396,6 +422,7 @@ export function createClaw<const Config extends ClawConfig<RuntimeConfig>>(
 			clawsStore,
 			effects: effectsStore,
 			events: pluginEventSink(eventSinks),
+			secrets,
 		},
 		plugins: (config.plugins ?? []) as readonly EuroclawPlugin[],
 	});

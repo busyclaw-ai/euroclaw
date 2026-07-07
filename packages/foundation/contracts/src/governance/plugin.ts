@@ -22,6 +22,7 @@ import type { ClawsStore } from "../claws/contracts";
 import type { EffectStore } from "../effects";
 import type { EntityField } from "../entity";
 import type { EventSink } from "../events";
+import type { Secrets } from "../tools/secrets";
 import type { AfterGate, BoundaryGate, Gate } from "./boundary";
 import type { ReasonCode } from "./reason-codes";
 
@@ -87,6 +88,10 @@ export type EuroclawPluginConfigureContext = {
 	readonly clawsStore?: ClawsStore;
 	readonly effects?: EffectStore;
 	readonly events?: EventSink;
+	/** The one-door secret reader (`@euroclaw/secrets`, built once by the assembly). A plugin that
+	 *  calls out (channels, sandbox egress) resolves credentials through `context.secrets.get(name)`
+	 *  rather than holding a token — same injection mechanism as `clawsStore`/`effects`/`events`. */
+	readonly secrets?: Secrets;
 	readonly [key: string]: unknown;
 };
 
