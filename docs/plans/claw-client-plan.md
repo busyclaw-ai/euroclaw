@@ -124,6 +124,13 @@ shared-logic package; react hooks are the web app's leaf.
 
 ## Slice 4 (later, cheap once slice 1 exists) — generated OpenAPI
 
+**BUILT 2026-07-13.** `endpoints()` gained the optional `output` schema (metadata-carried, pins the
+handler return type via a `ValidateEndpointOutputs` intersection, NEVER runtime-validated);
+`clawOpenApi(claw, options?)` in adapter-core walks `clawApiRouteList` + the shared
+endpoints-namespace discovery into an OpenAPI 3.1 document (arktype `toJsonSchema` with the
+`(ctx) => ctx.base` degrade-don't-throw fallback), served by the opt-in
+`toRequestHandler({ openApi })` route `GET /openapi.json` (bare document, no envelope).
+
 Konstantin's ask (2026-07-13): descriptions on the arktype schemas, OpenAPI exposed later — YES,
 and the reference codebase proves the exact shape: better-auth's `open-api` plugin
 (plugins/open-api/generator.ts) walks its endpoint definitions into an OpenAPI document and
