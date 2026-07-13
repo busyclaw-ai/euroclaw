@@ -204,3 +204,16 @@ tree-shaking). The `doc` ArkEnv meta channel is RETIRED unbuilt. Scalar referenc
 (euroclaw plugins are foundation-only and cannot import the generator; better-auth plugin-izes it
 only because everything there is a plugin). CDN-vs-vendored Scalar: explicit decision at build
 time against the self-contained posture.
+
+**FINAL doc-channel decision (2026-07-13, supersedes both notes above — Konstantin: "we will
+have not only openapi but cli too"):** docs are SCHEMA-NATIVE and consumer-agnostic. Multiple
+readers (OpenAPI generator, future CLI help, tool catalog) kill per-consumer endpoint blocks
+(drift BETWEEN consumers); the `doc` ArkEnv meta channel is UN-RETIRED as the rich-prose channel
+(`.describe()` stays terse error+summary; every consumer reads `meta.doc ?? description`); the
+endpoints() `openapi?:` block, if ever built, carries protocol mechanics only (responses, content
+types) — never prose. "Never leaked to client" is STRUCTURAL (described schemas live in server
+packages the client never imports; the only client-bundled schema is the docless envelope; the
+CLI is a server-side reader like the generator) and becomes ENFORCED via the next micro-slice:
+extend the slice-3 module-graph walk test with a contracts-import ALLOWLIST for @euroclaw/client
+(wire modules only — envelope, method names, kebab) so a described schema entering the client
+graph fails CI. Guarantee by test, not by tree-shaking behavior.
