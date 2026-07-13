@@ -1,6 +1,41 @@
 # Redaction DX — the `redaction` config group on createClaw
 
-Status: **designed, ready to build**. Companion to `redaction-coherence-plan.md` (independent — can build before/after/parallel; the per-claw posture semantics come from the busyclaw routing design, 2026-07-12).
+Status: **BUILT 2026-07-12** (merged with the coherence plan, full gate green). Slice 2 below is designed, not built.
+Companion to `redaction-coherence-plan.md` (independent — can build before/after/parallel; the per-claw posture semantics come from the busyclaw routing design, 2026-07-12).
+
+## Slice 2 (BUILT 2026-07-13) — the governed read path: `view` on reads, erasure on api
+
+Build notes: audit boundary widened to `'tool' | 'model' | 'privacy'` (erasure isn't a "read");
+`forgetSubject` is a FLAT api method (route machinery maps flat methods → POST /forget-subject —
+a DSAR endpoint for free); the handle grew a write-side `redact` twin because the invariant test
+caught `sendMessage`/`appendMessage` persisting the product transcript RAW (pre-existing bug —
+the runtime transcript was tokenized, the claws-store copy was not); handle rides the RESOLVED
+redactor so per-claw raw rows pass through both directions.
+
+Konstantin's ask ("`listMessages({ rehydrate: true })`?") — accepted with two refinements. Today's
+read path (host hand-builds `createPiiMappingStore(adapter)` + `createStoredRedactor`) is an
+UNGOVERNED side door: invisible to audit, permanently outside the future app-authz PEP, and the
+host hand-assembles `(scope, scopeId)` where a fat-fingered id silently returns tokens.
+
+- **`view: "redacted" | "original"`** (default `"redacted"`) on `listMessages` and the
+  `sendMessage` result — a VIEW, not a `rehydrate` boolean. Naming (re-decided 2026-07-13,
+  Konstantin found "tokens|reidentified" too technical): both words are existing product
+  vocabulary — `redaction` is the config group, `original` is the pii_mapping COLUMN name for the
+  raw value — zero new nouns. NOT `"raw"`: that word belongs to the posture and must not mean a
+  second thing. The precise term ("re-identification") lives in the AUDIT EVENT, where precision
+  serves the reader. Runs the assembly's own redactor with the api's own container — no host-side
+  context assembly.
+- **Every original-view read emits an audit event** (container, principal when present, range),
+  in re-identification language. It is an accountability EVENT, not a transform — this is what
+  makes api-absorption correct rather than sugar; the side-door reader can never be audited.
+- **`claw.api.redaction.forgetSubject(subjectId)`** — erasure joins the same governed door
+  (audited crypto-shred), retiring the hand-built store for hosts entirely.
+- **Invariant:** the reidentified view is read-side ONLY — never written back, never cached into
+  durable structures ("tokens at rest" must survive the read path).
+- **Sequencing:** shippable now under the trusted-host model (host authorizes before calling, as
+  with every `claw.api` method); when app-authz lands, the PEP gates `view` per principal; the
+  `eu()` preset may SEAL a gate denying `"original"` outside an approved purpose.
+- Raw-posture rows: `view` is a no-op (nothing mapped) — same code path, no branch.
 Layer: `euroclaw` assembly (config group, claw field, creation API, wiring), `@euroclaw/core` (one small routing-redactor factory). Contracts and runtime UNCHANGED — `createRuntime.redactor` stays the mechanism port.
 
 ## Problem — today's composition is three constructors and a hand-rolled wrapper
