@@ -237,3 +237,8 @@ residue is one clearly-owned optional key in downstream autocomplete. Keep: `doc
 reader with precedence built in (`meta.euroclaw?.doc ?? description`); the client
 import-allowlist test unchanged. Standing rule: the augmented interface is ADDITIVE-ONLY across
 versions (mixed-version node_modules must merge cleanly).
+
+**BUILT 2026-07-13** — contracts `governance/doc.ts` (typed ArkEnv augmentation + `docOf`, barrel-only),
+wire subpaths `./claw-api` + `./governance/endpoints` with the client's barrel-ban/allowlist/docless-source
+test (`packages/client/tests/contracts-wire.test.ts`), and `clawOpenApi` consuming the channel into the
+top-level request/response schema `description` (field-level surfacing deferred).
