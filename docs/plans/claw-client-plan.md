@@ -189,3 +189,18 @@ message, the escape valve is a declared meta key, not a `.openapi()` method and 
 `meta.doc ?? description`. Named `doc`, not `openapi` — OpenAPI is one consumer of documentation,
 not its definition; the same channel later carries `example`/`deprecated`. Build on first real
 divergent-text need (endpoint-level `description` already covers per-operation prose).
+
+**Re-decided (2026-07-13, supersedes the `doc` meta channel above): docs stay COLOCATED; the
+reference UI joins the adapter option.** Grounded in better-auth plugins/open-api: their plugin
+holds ZERO prose — it is generation + serving (GET /open-api/generate-schema + a Scalar
+/reference page with theme/nonce/disable options, index.ts:102-139); doc text comes from zod
+.describe() (generator.ts:161-169) and per-endpoint `metadata.openapi` blocks (generator.ts:215+),
+both colocated with the endpoints. euroclaw mapping: `description`/`output` on endpoints() already
+ARE those channels; richer per-endpoint OpenAPI later = an optional colocated `openapi?: {...}`
+block on the endpoints() entry (their metadata.openapi analog) — NEVER centralized prose (drift
+machine) and NEVER schema prose in contracts (client-bundle guarantee by structure, not by
+tree-shaking). The `doc` ArkEnv meta channel is RETIRED unbuilt. Scalar reference page ships as
+`toRequestHandler(claw, { openApi: { reference: { theme, nonce, path } } })` — adapter-homed
+(euroclaw plugins are foundation-only and cannot import the generator; better-auth plugin-izes it
+only because everything there is a plugin). CDN-vs-vendored Scalar: explicit decision at build
+time against the self-contained posture.
