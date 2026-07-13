@@ -111,6 +111,32 @@ One framework binding (his stack): atoms → hooks by the `use${Capitalize(key)}
 framework-free, which is exactly the busyclaw Option B split: client-core (proxy + atoms) is the
 shared-logic package; react hooks are the web app's leaf.
 
+## Slice 4 (later, cheap once slice 1 exists) — generated OpenAPI
+
+Konstantin's ask (2026-07-13): descriptions on the arktype schemas, OpenAPI exposed later — YES,
+and the reference codebase proves the exact shape: better-auth's `open-api` plugin
+(plugins/open-api/generator.ts) walks its endpoint definitions into an OpenAPI document and
+serves it + a Scalar reference UI. euroclaw's version is cheaper because slice 1 already
+declares everything the generator needs:
+
+- **Schemas carry their own docs**: arktype 2.2 metadata (`.describe()` / `.configure({...})`)
+  on input fields flows into `type.toJsonSchema()` output; `endpoints()` gains an optional
+  per-endpoint `description` (→ operation summary) and optional `output` schema (absent →
+  the envelope with unspecified `data`). OpenAPI **3.1** target — natively JSON Schema, so
+  `toJsonSchema()` output embeds without a 3.0 downcast. Exotic types (morphs/cyclic) use
+  arktype's toJsonSchema fallback options; endpoint inputs are plain data shapes, so this is
+  a corner, not a wall.
+- **One generator covers the WHOLE surface**: `clawOpenApi(claw)` walks `clawApiRouteList`
+  (base methods — input schemas exist today) + every plugin's `endpoints()` metadata. Tags from
+  the first path segment; the uniform `clawResponseEnvelope` documents success/error once.
+- **Serving**: opt-in route on `toRequestHandler` — `GET /openapi.json`; a reference UI is a
+  later nicety (better-auth loads Scalar from a CDN — decide against euroclaw's self-contained
+  posture then, not now).
+- **The strategic loop**: `registerOpenApiSpec` already turns OpenAPI documents into governed
+  tools — so one claw can register ANOTHER claw's generated spec and call it as governed,
+  policy-addressable tools. Claw-to-claw federation falls out of slice 1 + this generator, and
+  app-authz's action vocabulary can derive from the same endpoint metadata.
+
 ## Sequencing & relations
 
 1. Slice 1 (server endpoints) → 2 (client core) → 3 (react) — each gated.
