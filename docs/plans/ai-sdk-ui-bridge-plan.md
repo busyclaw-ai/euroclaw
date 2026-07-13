@@ -31,10 +31,36 @@ pre-allocated runId; every event envelope carries `runId`; event payloads are re
 approvals park durably; `api.continueRun` resumes with recording; `listMessages({ view })` and
 `$context.redaction` for the original view.
 
-1. **`createUiStreamBroker()`** — a `RuntimeEventSink` installed once at
-   `createClaw({ events: [broker.sink, …] })`; `subscribe(runId, listener)` fans events out
-   per run. Subscribe BEFORE `sendMessage` — no missed events.
-2. **`clawChatHandler(claw, broker, options)`** → `(request: Request) => Promise<Response>`:
+### API (settled 2026-07-13) — three exports
+
+```ts
+const chat = clawChat();                       // BEFORE createClaw (the ordering cycle is real:
+const claw = createClaw({ events: [chat.events], … });   // sink before claw, claw before handler)
+export const POST = chat.handler(claw, {
+  authorize: async (request, hint /* client body values — UNTRUSTED */) => {
+    // return authorized coordinates, or a Response (401/403) to short-circuit
+    return { clawId, threadId, principal, view? };
+  },
+});
+const initial = toUIMessages(records);         // pure mapper: MessageRecord[] → UIMessage[]
+```
+
+- `clawChat(): { events: RuntimeEventSink; handler(claw, options): (req: Request) => Promise<Response> }`
+- **`authorize` is REQUIRED** — mounting an unauthenticated user-facing endpoint is
+  unrepresentable. It owns `clawId`/`threadId` (client body is a `hint` to validate, never
+  trusted), `principal` (feeds `grantApproval.by`, the reidentification audit, later the PEP),
+  and `view` (server-decided; a client can never request `"original"`).
+- Approvals need zero host code: the handler detects the tool-approval-response part, maps
+  approved → `grantApproval({ by: principal })` + `continueRun` (streamed), denied →
+  `denyApproval`.
+- Deliberately NOT a plugin yet: plugin routes sit outside host auth today; after app-authz a
+  plugin form can wrap this same handler.
+
+Mechanics behind that surface:
+
+1. **The broker** (`chat.events`) — a `RuntimeEventSink` fanning events out per `runId`;
+   the handler subscribes BEFORE `sendMessage` — no missed events.
+2. **The handler** → `(request: Request) => Promise<Response>`:
    - POST body: `useChat`'s message payload plus host fields (`clawId`, `threadId`) via the
      transport's request preparation; the handler takes the LAST user message's text.
    - If the last message carries a **tool-approval-response part** → `api.grantApproval` /
