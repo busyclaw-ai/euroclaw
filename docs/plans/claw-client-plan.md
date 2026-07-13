@@ -217,3 +217,13 @@ CLI is a server-side reader like the generator) and becomes ENFORCED via the nex
 extend the slice-3 module-graph walk test with a contracts-import ALLOWLIST for @euroclaw/client
 (wire modules only — envelope, method names, kebab) so a described schema entering the client
 graph fails CI. Guarantee by test, not by tree-shaking behavior.
+
+**Mechanics amendment (2026-07-13, Konstantin: global aug would contaminate users' arktype):**
+NO `declare global` ships — a library-shipped ArkEnv augmentation merges into every downstream
+compilation (their own arktype gains `doc`), and global interface merging is an ownerless shared
+namespace (a second library or future arktype claiming `doc` breaks USER builds). Instead: a
+blessed helper pair in contracts — `doc(t, text)` writing the NAMESPACED meta key
+`{ euroclaw: { doc } }` (one cast inside the helper, the AI-SDK blessed-seam precedent; prefix
+ownership like euroclaw__ context keys and the euroclaw tool stamp) and `docOf(t)` as the typed
+reader. Consumers read `docOf(t) ?? t.description`. Zero ambient types, collision-proof,
+user-invisible. Verify at build: arktype preserves unknown meta keys at runtime.
