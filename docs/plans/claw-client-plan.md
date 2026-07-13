@@ -181,3 +181,11 @@ client bundle is contracts+nanostores and never validates inputs), and `openApi`
 transport semantics that belong on the adapter (the redaction-group layering rule: config lives
 where the assembly acts on it). The zero-runtime shape already exists: standalone `clawOpenApi(claw)`
 at build time → static openapi.json, no route mounted.
+
+**Settled-deferred (2026-07-13): the `doc` meta channel.** `.describe()` is dual-use in arktype
+(validation error text + doc fallback) — when a field wants doc prose that diverges from its error
+message, the escape valve is a declared meta key, not a `.openapi()` method and not stripping:
+`t.configure({ doc: "…" })` (ArkEnv meta extension in contracts), generator precedence
+`meta.doc ?? description`. Named `doc`, not `openapi` — OpenAPI is one consumer of documentation,
+not its definition; the same channel later carries `example`/`deprecated`. Build on first real
+divergent-text need (endpoint-level `description` already covers per-operation prose).
