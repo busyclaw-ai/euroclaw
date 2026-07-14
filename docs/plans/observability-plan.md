@@ -1,8 +1,9 @@
 # Observability — finish the events plane
 
-> Status: **BUILT (2026-07-14)** — slices 1–4: `fe38037` (fan-out split + catalog),
-> `7bdc3a0` (plugin.eventSinks), `9b8260d` (logEvents + @euroclaw/otel), slice 4 = this
-> commit (warn seam + plane-boundary notes). Grounded in the docs/research corpus (mastra,
+> Status: **BUILT (2026-07-14)** — slices 1–5: `fe38037` (fan-out split + catalog),
+> `7bdc3a0` (plugin.eventSinks), `9b8260d` (logEvents + @euroclaw/otel), `c49d38f`
+> (warn seam + plane-boundary notes), slice 5 (door redaction) = this commit. Grounded
+> in the docs/research corpus (mastra,
 > junior, nullclaw, picoclaw, hermes, zeroclaw, executor) + a full repo surface survey
 > (same date).
 > Scope: make the operational event stream the standardized observability plane — typed
@@ -145,6 +146,24 @@ here), the runtime tool-collision warn (`runtime.ts:421`), and the new observer-
 failure reports (§1). Not a logger — no levels, no structure, no transport; it's the one
 injectable door for "euroclaw wants to tell the operator something outside the event
 stream". Existing per-surface options keep working (they win over the default).
+
+### Slice 5 (added 2026-07-14) — door redaction
+
+The plugin emit door (`ctx.events.emit`) redacts the plugin-authored payload BEFORE fan-out,
+but only under redacted postures:
+
+- No detector/custom redactor (the raw recipe) or posture `raw` → passthrough, byte-identical
+  (the door never even walks the payload).
+- `strict` → every door event: with `recording` present → into that claw's
+  (`"claw"`, clawId) container — the same container the transcript write uses; claw-less
+  (boot/cron/webhook) → into the emitting plugin's (`"plugin"`, id) container.
+- `per-claw` → with `recording`, the claw's birth posture decides via the ONE routing
+  redactor transcript writes use; claw-less FAILS CLOSED into the per-plugin container.
+
+Each plugin gets its OWN door (the assembly binds `plugin.id` per configure context) — per-
+plugin containers need attribution, never a shared bucket. The envelope (`type`, `id`,
+`createdAt`, `runId`, `recording`) stays verbatim. The runtime's own kinds are unaffected
+(redacted at their source boundaries; `emitRuntimeEvent` never routes through the door).
 
 ## Non-goals
 
